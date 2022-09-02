@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"name": "SymmetricComponentAnalysis",
+			"path": "..\\..\\..\\..\\.julia\\dev\\SymmetricComponentAnalysis"
+		},
+		{
+			"name": "sca",
+			"path": "."
+		},
+		{
+			"name": "UsingRISHPC",
+			"path": "..\\..\\..\\Study_n_research\\Programming\\WUSTL_RIS_Workshop\\UsingRISHPC"
+		}
+	],
+    "settings": {}
+}
