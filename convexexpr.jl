@@ -211,6 +211,13 @@ function mincol(Mw,Mh,W0,H0,k,λ,β,order)
     xsol
 end
 
+function minMw_pixel!(Mw,Mh,W0,H0,λ,β,order)
+    p = size(Mw,2)
+    for k in 1:p
+        Mw[:,k] = mincol(Mw,Mh,W0,H0,k,λ,β,order)
+    end
+end
+
 function minMw_cbyc!(Mw,Mh,W0,H0,λ,β,order)
     p = size(Mw,2)
     for k in 1:p
@@ -248,10 +255,13 @@ function minMwMh(Mw,Mh,W0,H0,λ,β1,β2,maxiter,order; cd_group=:pixel, imgsz=(4
             minMw_pixel!(Mh',Mw',H0',W0',λ,β2,order)
         end            
         pensum = order == 1 ? penaltyL1(Mw,Mh,W0,H0,λ,β1,β2) : penaltyL2(Mw,Mh,W0,H0,λ,β1,β2)
-        push!(f_xs, pensum)
         x_abs = norm(Mwprev-Mw)^2*norm(Mhprev-Mh)^2
         @show iter, x_abs, pensum
-        isnan(x_abs) && break
+        if isnan(x_abs)
+            Mw, Mh = copy(Mwprev), copy(Mhprev)
+            break
+        end
+        push!(f_xs, pensum)
         push!(x_abss, x_abs)
         W2,H2 = copy(W0*Mw), copy(Mh*H0)
         normalizeWH!(W2,H2)

@@ -27,7 +27,6 @@ if Sys.iswindows()
     cd("C:\\Users\\kdw76\\WUSTL\\Work\\julia\\sca")
 elseif Sys.isunix()
     cd("/storage1/fs1/holy/Active/daewoo/work/julia/sca")
-    #cd("/home/daewoo/work/julia/sca")
 end
 
 Pkg.activate(".")
@@ -37,10 +36,10 @@ using SymmetricComponentAnalysis
 using StaticArrays, IntervalSets, LinearAlgebra, Optim, NMF, BenchmarkTools
 using FakeCells, AxisArrays, MappedArrays, JLD, Printf, PositiveFactorizations
 using ForwardDiff, Calculus, RandomizedLinAlg#, ImageAxes
-using ImageCore, ImageView, Dates#, CairoMakie
+using ImageCore, Dates, ImageView#, CairoMakie
 #using ProfileView, Profile # ProfileView conflicts with ImageView 
 
-Images.save("dummy.png",rand(2,2)) # If we didn't call this line before `using PyPlot`,
+save("dummy.png",rand(2,2)) # If we didn't call this line before `using PyPlot`,
                             # ImageMagick is used when saving image. That doesn't
                             # properly close the file after saving.
 using PyPlot
@@ -50,7 +49,7 @@ include(joinpath(pkgdir(SymmetricComponentAnalysis),"test","testutils.jl"))
 
 SCA = SymmetricComponentAnalysis
 
-# function loadfakecell(fname; svd_method=:isvd, gt_ncells=7, ncells=0, lengthT=100, imgsz=(40,20),
+# function loadfakecell0(fname; svd_method=:isvd, gt_ncells=7, ncells=0, lengthT=100, imgsz=(40,20),
 #                         fovsz=imgsz, SNR=10, jitter=0, save=true)
 #     if isfile(fname)
 #         fakecells_dic = load(fname)
@@ -93,16 +92,6 @@ SCA = SymmetricComponentAnalysis
 #     return X, imgsz, ncells, fakecells_dic, img_nl
 # end
 
-# function _balanced_WH(W, H)
-#     sqpwrsw = sqrt.(norm.(eachcol(W)))
-#     sqpwrsh = sqrt.(norm.(eachrow(H)))
-#     balfacs = sqpwrsh./sqpwrsw
-#     Wn = W*Diagonal(balfacs)
-#     Hn = Diagonal(1 ./balfacs)*H
-#     Wn, Hn
-# end
-# balanced_WH(W, X) = (H = W\X; _balanced_WH(W, H))
-
 # for SNR = [60, 40 , 20, 0, -10]
 #     #show SNR
 #     imgsz=(40,20); ncells=15; lengthT=1000; jitter=0; SNR=SNR; # SNR=10(noisey), SNR=40(less noisey)
@@ -121,7 +110,6 @@ X, imgsz, ncells, fakecells_dic, img_nl, maxSNR_X = loadfakecell("fakecells_sz$(
                                             fovsz=imgsz, ncells=ncells, lengthT=lengthT, jitter=jitter, SNR=SNR, save=true);
 gtW, gtH, gt_ncells = fakecells_dic["gtW"], fakecells_dic["gtH"], fakecells_dic["gt_ncells"];
 imsaveW("X_SNR$(SNR).png",maxSNR_X,imgsz,borderwidth=1,colors=(colorant"black", colorant"black", colorant"white"))
-
 
 # SCA
 tol = -1#1e-20
@@ -186,10 +174,10 @@ plotW([log10.(x_abs) log10.(f_x)],"iter_vs_penalty.png"; title="convergence (SCA
 tol = -1#1e-20
 stparams = StepParams(β1=0.1, β2=0.1, μ0=0.1, reg=:WkHk, order=2, hfirst=true, processorder=:none, poweradjust=:balance,
         method=:cbyc_uc, rectify=:none, objective=:normal, reductfn = (A)-> (ATA = (A'A); SCA.rectify!(ATA); sqrt.(ATA))) # Matrix(1.0I,p,p)) # decimate(A,200)) # 
-lsparams = LineSearchParams(method=:sca_full, c=1e-4, α0=1.0, ρ=0.5, maxiter=100,
-        show_figure=true, iterations_to_show=collect(1:1))
+lsparams = LineSearchParams(method=:sca_full, c=1e-4, α0=0.01, ρ=0.5, maxiter=100, show_figure=false,
+        iterations_to_show=[1])
 cparams = ConvergenceParams(allow_f_increases = true, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
-        x_abstol=tol, successive_f_converge=2, maxiter=1, store_trace=true, show_trace=true)
+        x_abstol=tol, successive_f_converge=2, maxiter=300, store_trace=true, show_trace=true)
 rt1 = @elapsed W0, H0, Mw, Mh = initsemisca(X, ncells, balance=true)
 Mw0, Mh0 = copy(Mw), copy(Mh);
 #imshowW(W0,imgsz,borderwidth=1)
@@ -242,7 +230,7 @@ function mincol(Mw,Mh,W,H,k,λ,β,order)
     x = Variable(p)
     mhk = Mh[k,:]'
     sparsity = order == 1 ? norm(W*x, 1) : sumsquares(W*x)
-    problem = minimize(sumsquares(E-x*mhk) + λ*sumsquares(max(0,-W*x)) + β*sparsity)
+    problem = minimize(sumsquares(E-x*mhk) + λ*sumsquares(min(0,W*x)) + β*sparsity)
     solve!(problem, SCS.Optimizer; silent_solver = true)
     xsol = x.value
     errprev = norm(E-Mw[:,k]*mhk)^2; err = norm(E-xsol*mhk)^2
@@ -268,7 +256,7 @@ function minMw_ac!(Mw,Mh,W,H,λ,β,order)
     Aw = zeros(m*p,p^2); bw = zeros(m*p)
     SCA.direct!(Aw, bw, W; allcomp = false) # vec(W*reshape(x,p,p)) == (Aw*x)
     spars = order == 1 ? norm(Aw*x, 1) : sumsquares(Aw*x)
-    problem = minimize(sumsquares(Ivec-A*x)+ λ*sumsquares(max(0,-A*x)) + β*spars)
+    problem = minimize(sumsquares(Ivec-A*x)+ λ*sumsquares(min(0,A*x)) + β*spars)
     solve!(problem, SCS.Optimizer; silent_solver = true)
     Mw[:,:] .= reshape(x.value,p,p)
 end
@@ -422,7 +410,6 @@ for SNR in SNRs
 end
 
 #================== Convex.jl ==================#
-
 function plotP(penP1, penP2, penP3, penP4, extent, vmaxP)
     # ticks = [-π, -π/2, 0, π/2, π]
     # ticklabels = ["-π", "-π/2", "0", "π/2", "π"]
@@ -471,7 +458,7 @@ function plotP(penP1, penP2, penP3, penP4, extent, vmaxP)
     # ax.set_xticklabels(ticklabels)
     # ax.set_yticks(ticks)
     # ax.set_yticklabels(ticklabels)
-    ax.set_title("sumsquares(C*x)")
+    ax.set_title("norm(C*x, 1)")
 
     axs
 end
@@ -484,18 +471,18 @@ function penP1P2P3(penfn1, penfn2, penfn3, x, x1s, x2s)
 end
 
 using Convex, SCS
-#for i = 1:100
+for i = 1:100
 A = randn(2, 2).-0.5; b = randn(2) .- 0.5; C = randn(2, 2) .- 0.5;
 x = Variable(2)
 pen_data(x) = norm(A*x - b,2)^2
-pen_nn(x) = norm(max.(0,-A*x))^2
-pen_spars(x) = norm(C*x, 2)^2
-problem = minimize(sumsquares(A*x - b) + sumsquares(max(0,-A*x)) + sumsquares(x))
+pen_nn(x) = norm(min.(0,A*x))^2
+pen_spars(x) = norm(C*x, 1)
+problem = minimize(sumsquares(A*x - b) + sumsquares(min(0,A*x)) + sumsquares(x))
 solve!(problem, SCS.Optimizer; silent_solver = true)
 xsol = x.value
-#end
+end
 
-n = 10; vmax = 15
+n = 10; vmax = 6
 pensum, penP1, penP2, penP3 = penP1P2P3(pen_data, pen_nn, pen_spars, xsol, -n:0.1:n , -n:0.1:n)
 extent = (xsol[1]-n,xsol[1]+n,xsol[2]-n,xsol[2]+n)
 axs = plotP(pensum, penP1, penP2, penP3, extent, vmax)
@@ -10896,7 +10883,12 @@ function plotL2D(penL1, penL2; vminL1=nothing, vmaxL1=nothing, vminL2=nothing, v
     axs
 end
 
-#===== Check if  noVNC is installed =========================================#
+#===== Pass arguments to this document ===========================#
+# $ julia product10.jl arg1 arg2
+# then ARGS will get the arguments as String array as ["arg1", "arg2"]
+@show ARGS
+
+#======= check if this is noVNC graphical platform ================#
 is_ImageView_available = true
 try
     Sys.islinux() && run(`ls /usr/bin/x11vnc`) # check if this is noVNC graphical platform
