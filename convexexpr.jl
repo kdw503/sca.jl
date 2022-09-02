@@ -194,6 +194,27 @@ end
 penaltyL1(Mw,Mh,W0,H0,λ,β1,β2) = norm(I-Mw*Mh)^2 + λ*(sca2(W0*Mw)+sca2(Mh*H0)) + β1*norm(W0*Mw,1) + β2*norm(Mh*H0,1)
 penaltyL2(Mw,Mh,W0,H0,λ,β1,β2) = norm(I-Mw*Mh)^2 + λ*(sca2(W0*Mw)+sca2(Mh*H0)) + β1*norm(W0*Mw)^2 + β2*norm(Mh*H0)^2
 
+function minpix(Mw,Mh,W0,H0,i,k,λ,β,order)
+    p = size(W0,2)
+    Eprev = I-Mw*Mh
+    Eprevi = Eprev[i,:]; w0i = W0[:,i]
+    mwk = Mw[:,k]; mwik=mwk[i]; mhk = Mh[k,:]
+    Ei = Eprevi + mwik*mhk
+    x = Variable(1)
+    w0mwk = W0*mwk; w0mwik = w0mwk-w0i*mwik; womwikx = w0mwik+w0i*x
+    sparsity = order == 1 ? norm(womwikx, 1) : sumsquares(womwikx)
+    problem = minimize(sumsquares(Ei-x*mhk) + λ*sumsquares(max(0,-womwikx)) + β*sparsity)
+    solve!(problem, SCS.Optimizer; silent_solver = true)
+    xsol = x.value
+    # errprev = norm(Eprevi)^2; err = norm(Ei-xsol*mhk)^2
+    # sparsprev = order == 1 ? β*norm(w0mwk,1) : β*norm(w0mwk)^2
+    # spars = order == 1 ? β*norm(w0mwik+w0i*xsol,1) : β*norm(w0mwik+w0i*xsol)^2 
+    # nnegprev = λ*norm(min.(0,w0mwk))^2
+    # nneg = λ*norm(min.(0,w0mwik+w0i*xsol))^2 
+    # errprev+sparsprev+nnegprev < err+spars+nneg && @show problem.status
+    xsol
+end
+
 function mincol(Mw,Mh,W0,H0,k,λ,β,order)
     p = size(W0,2)
     Eprev = I-Mw*Mh
@@ -204,17 +225,21 @@ function mincol(Mw,Mh,W0,H0,k,λ,β,order)
     problem = minimize(sumsquares(E-x*mhk) + λ*sumsquares(max(0,-W0*x)) + β*sparsity)
     solve!(problem, SCS.Optimizer; silent_solver = true)
     xsol = x.value
-    errprev = norm(E-Mw[:,k]*mhk)^2; err = norm(E-xsol*mhk)^2
+    errprev = norm(Eprev)^2; err = norm(E-xsol*mhk)^2
     sparsprev = order == 1 ? β*norm(W0*Mw[:,k],1) : β*norm(W0*Mw[:,k])^2
     spars = order == 1 ? β*norm(W0*xsol,1) : β*norm(W0*xsol)^2 
-    errprev+sparsprev < err+spars && @show problem.status
+    nnegprev = λ*norm(min.(0,W0*Mw[:,k]))^2
+    nneg = λ*norm(min.(0,W0*xsol))^2 
+    errprev+sparsprev+nnegprev < err+spars+nneg && @show problem.status
     xsol
 end
 
 function minMw_pixel!(Mw,Mh,W0,H0,λ,β,order)
     p = size(Mw,2)
     for k in 1:p
-        Mw[:,k] = mincol(Mw,Mh,W0,H0,k,λ,β,order)
+        for i in 1:p
+            Mw[i,k] = minpix(Mw,Mh,W0,H0,i,k,λ,β,order)
+        end
     end
 end
 
@@ -241,8 +266,9 @@ end
 
 function minMwMh(Mw,Mh,W0,H0,λ,β1,β2,maxiter,order; cd_group=:pixel, imgsz=(40,20), SNR=60)
     f_xs=[]; x_abss=[]
-    iter = 1
+    iter = 0
     while iter <= maxiter
+        iter += 1
         Mwprev, Mhprev = copy(Mw), copy(Mh)
         if cd_group == :column
             minMw_cbyc!(Mw,Mh,W0,H0,λ,β1,order)
@@ -261,6 +287,7 @@ function minMwMh(Mw,Mh,W0,H0,λ,β1,β2,maxiter,order; cd_group=:pixel, imgsz=(4
         @show iter, x_abs, pensum
         if isnan(x_abs)
             Mw, Mh = copy(Mwprev), copy(Mhprev)
+            iter -= 1
             break
         end
         push!(f_xs, pensum)
@@ -279,7 +306,6 @@ function minMwMh(Mw,Mh,W0,H0,λ,β1,β2,maxiter,order; cd_group=:pixel, imgsz=(4
                 error("Unsupproted cd_group")
             end
         end
-        iter += 1
     end
     Mw, Mh, f_xs, x_abss, iter
 end
@@ -288,12 +314,13 @@ plt.ioff()
 
 SNRs = eval(Meta.parse(ARGS[1])); maxiter = eval(Meta.parse(ARGS[2]))
 order = eval(Meta.parse(ARGS[3])); Wonly = eval(Meta.parse(ARGS[4])); cd_group = eval(Meta.parse(ARGS[5]))
-λ = eval(Meta.parse(ARGS[6])); βs = eval(Meta.parse(ARGS[7]))
+λ = eval(Meta.parse(ARGS[6])); βs = eval(Meta.parse(ARGS[7])) # be careful spaces in the argument
 @show SNRs, maxiter
 @show order, Wonly, cd_group
 @show λ, βs
 imgsize = (40,20); lengthT=1000; jitter=0
 for SNR in SNRs
+    @show SNR
     X, imgsz, ncells, fakecells_dic, img_nl, maxSNR_X = loadfakecell("fakecells_sz$(imgsize)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR).jld",
                                                 fovsz=imgsize, ncells=15, lengthT=lengthT, jitter=jitter, SNR=SNR, save=true);
     gtW, gtH, gt_ncells = fakecells_dic["gtW"], fakecells_dic["gtH"], fakecells_dic["gt_ncells"];
@@ -307,9 +334,9 @@ for SNR in SNRs
         if cd_group == :column
             fprefix = "W2_SNR$(SNR)_Convex_cbyc_L$(order)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2)"
         elseif cd_group == :WH
-            fprefix = "W2_SNR$(SNR)_Convex_ac_L$(order)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2).jld"
+            fprefix = "W2_SNR$(SNR)_Convex_ac_L$(order)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2)"
         elseif cd_group == :pixel
-            fprefix = "W2_SNR$(SNR)_Convex_pbyp_L$(order)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2).jld"
+            fprefix = "W2_SNR$(SNR)_Convex_pbyp_L$(order)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2)"
         else
             error("Unsupproted cd_group")
         end               
