@@ -239,7 +239,7 @@ function minMw_ac!(Mw,Mh,W0,H0,λ,β,order)
     Mw[:,:] .= reshape(x.value,p,p)
 end
 
-function minMwMh(Mw,Mh,W0,H0,λ,β1,β2,maxiter,order; cd_group=:pixel, imgsz=(40,20))
+function minMwMh(Mw,Mh,W0,H0,λ,β1,β2,maxiter,order; cd_group=:pixel, imgsz=(40,20), SNR=60)
     f_xs=[]; x_abss=[]
     iter = 1
     while iter <= maxiter
@@ -253,6 +253,8 @@ function minMwMh(Mw,Mh,W0,H0,λ,β1,β2,maxiter,order; cd_group=:pixel, imgsz=(4
         elseif cd_group == :pixel
             minMw_pixel!(Mw,Mh,W0,H0,λ,β1,order)
             minMw_pixel!(Mh',Mw',H0',W0',λ,β2,order)
+        else
+            error("Unsupproted cd_group")
         end            
         pensum = order == 1 ? penaltyL1(Mw,Mh,W0,H0,λ,β1,β2) : penaltyL2(Mw,Mh,W0,H0,λ,β1,β2)
         x_abs = norm(Mwprev-Mw)^2*norm(Mhprev-Mh)^2
@@ -267,10 +269,14 @@ function minMwMh(Mw,Mh,W0,H0,λ,β1,β2,maxiter,order; cd_group=:pixel, imgsz=(4
         normalizeWH!(W2,H2)
         if iter%10 == 0
             @show iter
-            if cbyc
-                imsaveW("W2_SNR-10_Convex_cbyc_L$(order)_bw$(β1)_bh$(β2)_iter$(iter).png",sortWHslices(W2,H2)[1],imgsz,borderwidth=1)
+            if cd_group == :column
+                imsaveW("W2_SNR$(SNR)_Convex_cbyc_L$(order)_bw$(β1)_bh$(β2)_iter$(iter).png",sortWHslices(W2,H2)[1],imgsz,borderwidth=1)
+            elseif cd_group == :WH
+                imsaveW("W2_SNR$(SNR)_Convex_ac_L$(order)_bw$(β1)_bh$(β2)_iter$(iter).png",sortWHslices(W2,H2)[1],imgsz,borderwidth=1)
+            elseif cd_group == :pixel
+                imsaveW("W2_SNR$(SNR)_Convex_pbyp_L$(order)_bw$(β1)_bh$(β2)_iter$(iter).png",sortWHslices(W2,H2)[1],imgsz,borderwidth=1)
             else
-                imsaveW("W2_SNR-10_Convex_ac_L$(order)_bw$(β1)_bh$(β2)_iter$(iter).png",sortWHslices(W2,H2)[1],imgsz,borderwidth=1)
+                error("Unsupproted cd_group")
             end
         end
         iter += 1
@@ -297,11 +303,15 @@ for SNR in SNRs
         normalizeWH!(W0,H0); #imshowW(sortWHslices(W2,H2)[1],imgsz, borderwidth=1);# imshowW(W2,imgsz, borderwidth=1);
         imsaveW("W0_SNR$(SNR).png",sortWHslices(W0,H0)[1],imgsz,borderwidth=1)
         Mw0, Mh0 = copy(Mw), copy(Mh);
-        rt2 = @elapsed Mw, Mh, f_xs, x_abss, iter = minMwMh(Mw,Mh,W0,H0,λ,β1,β2,maxiter,order,cd_group=cd_group)
-        if cbyc
+        rt2 = @elapsed Mw, Mh, f_xs, x_abss, iter = minMwMh(Mw,Mh,W0,H0,λ,β1,β2,maxiter,order,cd_group=cd_group,SNR=SNR)
+        if cd_group == :column
             fprefix = "W2_SNR$(SNR)_Convex_cbyc_L$(order)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2)"
-        else
+        elseif cd_group == :WH
             fprefix = "W2_SNR$(SNR)_Convex_ac_L$(order)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2).jld"
+        elseif cd_group == :pixel
+            fprefix = "W2_SNR$(SNR)_Convex_pbyp_L$(order)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2).jld"
+        else
+            error("Unsupproted cd_group")
         end               
         save(fprefix*".jld", "f_xs", f_xs, "x_abss", x_abss, "SNR", SNR, "order", order, "β1", β1, "β2", β2, "rt2", rt2)
         W2,H2 = copy(W0*Mw), copy(Mh*H0)
