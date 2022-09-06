@@ -1,9 +1,18 @@
 #!/bin/bash
 
 # julia                          file                        SNRs maxiter L Wonly CD_group lambda betas
-# L2
-    # CbyC
-/usr/local/julia/bin/julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 1 true :column 0 [0.0001,0.001,0.003,0.005,0.008,0.01] # Wonly
+# pbyp, L1, w/o non-negativity
+julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 1 false :pixel 0 [0.0,0.0001,0.001,0.003,0.005,0.008,0.01]
+julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 1 true :pixel 0 [0.0001,0.001,0.003,0.005,0.008,0.01] # Wonly
 
-/usr/local/julia/bin/julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 2 true :column 0 [0.0001,0.001,0.003,0.005,0.008,0.01]
-/usr/local/julia/bin/julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 1 false :column 0 [0.0001,0.001,0.003,0.005,0.008,0.01]
+# pbyp, L2, w/o non-negativity
+julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 2 false :pixel 0 [0.0,0.0001,0.001,0.003,0.005,0.008,0.01]
+julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 2 true :pixel 0 [0.0001,0.001,0.003,0.005,0.008,0.01] # Wonly
+
+# pbyp, L1, with non-negativity
+julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 1 false :pixel 0.1 [0.0,0.0001,0.001,0.003,0.005,0.008,0.01]
+julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 1 true :pixel 0.1 [0.0001,0.001,0.003,0.005,0.008,0.01] # Wonly
+
+# pbyp, L2, with non-negativity
+julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 2 false :pixel 0.1 [0.0,0.0001,0.001,0.003,0.005,0.008,0.01]
+julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 2 true :pixel 0.1 [0.0001,0.001,0.003,0.005,0.008,0.01] # Wonly

@@ -27,4 +27,5 @@ Manifest.toml
 *.gif
 *.avi
 *.tif
+*.jld
 *workspace
