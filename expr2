@@ -1,11 +1,6 @@
 #!/bin/bash
 
 # julia                          file                        SNRs maxiter L Wonly CbyC lambda betas
-# L2
-    # CbyC
-/usr/local/julia/bin/julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 2 false true 0 [0.0001,0.001,0.003,0.005,0.008,0.01] # WH
-/usr/local/julia/bin/julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 2 true true 0 [0.0001,0.001,0.003,0.005,0.008,0.01] # Wonly
-# L2
-    # AC
-/usr/local/julia/bin/julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 2 false false 0 [0.0001,0.001,0.003,0.005,0.008,0.01] # WH
-/usr/local/julia/bin/julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 2 true false 0 [0.0001,0.001,0.003,0.005,0.008,0.01] # Wonly
+# pbyp, L2, w/o non-negativity
+julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 2 false :pixel 0 [0.0,0.0001,0.001,0.003,0.005,0.008,0.01]
+julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 20 2 true :pixel 0 [0.0001,0.001,0.003,0.005,0.008,0.01] # Wonly
