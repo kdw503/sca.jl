@@ -321,11 +321,11 @@ function minMwMh(Mw,Mh,W0,H0,λ,β1,β2,maxiter,order; cd_group=:pixel, imgsz=(4
         if iter%10 == 0
             @show iter
             if cd_group == :column
-                imsaveW("W2_SNR$(SNR)_Convex_cbyc_L$(order)_bw$(β1)_bh$(β2)_iter$(iter).png",sortWHslices(W2,H2)[1],imgsz,borderwidth=1)
+                imsaveW("W2_SNR$(SNR)_Convex_cbyc_L$(order)_lm$(λ)_bw$(β1)_bh$(β2)_iter$(iter).png",sortWHslices(W2,H2)[1],imgsz,borderwidth=1)
             elseif cd_group == :WH
-                imsaveW("W2_SNR$(SNR)_Convex_ac_L$(order)_bw$(β1)_bh$(β2)_iter$(iter).png",sortWHslices(W2,H2)[1],imgsz,borderwidth=1)
+                imsaveW("W2_SNR$(SNR)_Convex_ac_L$(order)_lm$(λ)_bw$(β1)_bh$(β2)_iter$(iter).png",sortWHslices(W2,H2)[1],imgsz,borderwidth=1)
             elseif cd_group == :pixel
-                imsaveW("W2_SNR$(SNR)_Convex_pbyp_L$(order)_bw$(β1)_bh$(β2)_iter$(iter).png",sortWHslices(W2,H2)[1],imgsz,borderwidth=1)
+                imsaveW("W2_SNR$(SNR)_Convex_pbyp_L$(order)_lm$(λ)_bw$(β1)_bh$(β2)_iter$(iter).png",sortWHslices(W2,H2)[1],imgsz,borderwidth=1)
             else
                 error("Unsupproted cd_group")
             end
@@ -356,11 +356,11 @@ for SNR in SNRs
         Mw0, Mh0 = copy(Mw), copy(Mh);
         rt2 = @elapsed Mw, Mh, f_xs, x_abss, iter = minMwMh(Mw,Mh,W0,H0,λ,β1,β2,maxiter,order,cd_group=cd_group,SNR=SNR)
         if cd_group == :column
-            fprefix = "W2_SNR$(SNR)_Convex_cbyc_L$(order)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2)"
+            fprefix = "W2_SNR$(SNR)_Convex_cbyc_L$(order)_lm$(λ)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2)"
         elseif cd_group == :WH
-            fprefix = "W2_SNR$(SNR)_Convex_ac_L$(order)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2)"
+            fprefix = "W2_SNR$(SNR)_Convex_ac_L$(order)_lm$(λ)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2)"
         elseif cd_group == :pixel
-            fprefix = "W2_SNR$(SNR)_Convex_pbyp_L$(order)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2)"
+            fprefix = "W2_SNR$(SNR)_Convex_pbyp_L$(order)_lm$(λ)_bw$(β1)_bh$(β2)_iter$(iter)_rt$(rt2)"
         else
             error("Unsupproted cd_group")
         end               
