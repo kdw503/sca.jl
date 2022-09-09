@@ -10898,3 +10898,32 @@ catch # not a graphical platform
     @warn("Not a RIS noVNC graphical platform")
     global is_ImageView_available = false
 end
+
+#=== variable in inner fn overwrite the outer variable with same name ====#
+function outer_f()
+    x = 1; y = 1
+    inner_inline_f(a)=(x=a*[2,3]; z=3) # this overwrites the outer x when this is called
+    function inner_f(a)
+        # can access outer variables
+        @show y # first call y = 1 but later call y = [4,6]
+        y = a*[2,3] # this overwrites the outer y when this fn is called
+        h = 3 # but this doesn't still live at the outer scope
+    end
+    @show x, y # shows (x, y) = (1, 1)
+    inner_inline_f_x=inner_inline_f(2)
+    inner_f_y=inner_f(2) # show y = 1
+    @show x, y # shows (x, y) = ([4, 6], [4, 6])
+    inner_f_y=inner_f(2) # shows y=[4, 6]
+    @show x, y # shows (x, y) = ([4, 6], [4, 6])
+    @show z # ERROR: UndefVarError: z not defined
+    @show h # ERROR: UndefVarError: h not defined
+end
+
+x = 1; y = 1
+inline_f(a)=(x=a*[2,3]) # this doesn't overwrite the global x when this is called
+function f(a)
+    y = a*[2,3] # this doesn't overwrite the global y when this fn is called
+end
+inline_f_x=inline_f(2)
+f_y=f(2)
+@show x, y # shows (x, y) = (1, 1)
