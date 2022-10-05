@@ -32,7 +32,7 @@ sd_group = eval(Meta.parse(ARGS[5])) # subspace descent subspace group (:pixel s
 @show order, Wonly, sd_group
 @show λs, βs
 flush(stdout)
-initpwradj = :balance; pwradj = :balance
+initpwradj = :normalize; pwradj = :normalize
 imgsize = (40,20); lengthT=1000; jitter=0
 for SNR in SNRs
     X, imgsz, ncells, fakecells_dic, img_nl, maxSNR_X = loadfakecell("fakecells_sz$(imgsize)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR).jld",
