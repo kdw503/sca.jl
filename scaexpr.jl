@@ -32,7 +32,7 @@ sd_group = eval(Meta.parse(ARGS[5])) # subspace descent subspace group (:pixel s
 @show order, Wonly, sd_group
 @show λs, βs
 flush(stdout)
-initpwradj = :balance; pwradj = :balance
+initpwradj = :balance; pwradj = :balance; tol=-1
 imgsize = (40,20); lengthT=1000; jitter=0
 for SNR in SNRs
     X, imgsz, ncells, fakecells_dic, img_nl, maxSNR_X = loadfakecell("fakecells_sz$(imgsize)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR).jld",
@@ -46,18 +46,25 @@ for SNR in SNRs
             @show SNR, λ, β
             β1 = β; β2 = Wonly ? 0. : β
             flush(stdout)
-            paramstr="_$(sd_group)_L$(order)_lm$(λ)_bw$(β1)_bh$(β2)"
-            fprefix = "Wuc_$(SNR)dB_Convex_$(initpwradj)_$(pwradj)"*paramstr
-            sd_group ∉ [:column, :ac, :pixel] && error("Unsupproted sd_group")
-            Mw, Mh = copy(Mw0), copy(Mh0);
-            rt2 = @elapsed Mw, Mh, f_xs, x_abss, xw_abss, xh_abss, iter = minMwMh!(Mw,Mh,W0,H0,λ1,λ2,β1,β2,maxiter,order;
-                            poweradjust=pwradj, fprefix=fprefix, sd_group=sd_group,SNR=SNR)
-            save(fprefix*"_iter$(iter)_rt$(rt2).jld", "f_xs", f_xs, "x_abss", x_abss, "SNR", SNR, "order", order, "β1", β1, "β2", β2, "rt2", rt2)
-            W2,H2 = copy(W0*Mw), copy(Mh*H0)
-            normalizeWH!(W2,H2); #imshowW(sortWHslices(W2,H2)[1],imgsz, borderwidth=1);# imshowW(W2,imgsz, borderwidth=1);
+            paramstr="_L$(order)_lm$(λ)_bw$(β1)_bh$(β2)"
+            reg = :WkHk; method=:cbyc_uc
+            stparams = StepParams(β1=β1, β2=β2, λ1=λ1, λ2=λ2, reg=reg, order=order, hfirst=true, processorder=:none,
+                    poweradjust=pwradj, method=method, rectify=:pinv, objective=:normal)
+            lsparams = LineSearchParams(method=:sca_full, c=0.5, α0=2.0, ρ=0.5, maxiter=maxiter, show_figure=false,
+                    iterations_to_show=[499,500])
+            cparams = ConvergenceParams(allow_f_increases = true, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
+                    x_abstol=tol, successive_f_converge=2, maxiter=maxiter, store_trace=true, show_trace=true)
+            fprefix = "Wuc_$(SNR)dB_$(initpwradj)_$(pwradj)"*paramstr
+            Mw, Mh = copy(Mw0), copy(Mh0)
+            rt2 = @elapsed W1, H1, objvals, trs = semiscasolve!(W0, H0, Mw, Mh; stparams=stparams, lsparams=lsparams, cparams=cparams);
+            W2,H2 = copy(W1), copy(H1)
+            normalizeWH!(W2,H2); iter = length(trs)
             imsaveW(fprefix*"_iter$(iter)_rt$(rt2).png",sortWHslices(W2,H2)[1],imgsz,borderwidth=1)
-            ax = plotW([log10.(x_abss) log10.(f_xs) log10.(xw_abss) log10.(xh_abss) ], fprefix*"_plot.png"; title="convergence (SCA)", xlbl = "iteration", ylbl = "log(penalty)",
-                legendstrs = ["log(x_abs)", "log(f_x)", "log(xw_abs)", "log(xh_abs)"], legendloc=1, separate_win=false)
+            
+            x_abss, xw_abss, xh_abss, f_xs, f_rel, semisympen, regW, regH = getdata(trs)
+            ax = plotW([log10.(x_abss) log10.(f_xs) log10.(xw_abss) log10.(xh_abss)],fprefix*"_iter$(iter)_rt$(rt2)_log10plot.png"; title="convergence (SCA)", xlbl = "iteration",
+                    ylbl = "log10(penalty)", legendstrs = ["log10(x_abs)", "log10(f_x)", "log10(xw_abs)", "log10(xh_abs)"], legendloc=1, separate_win=false)
+                    #,axis=[480,1000,-0.32,-0.28])
         end
     end
 end

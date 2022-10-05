@@ -32,28 +32,28 @@ sd_group = eval(Meta.parse(ARGS[5])) # subspace descent subspace group (:pixel s
 @show order, Wonly, sd_group
 @show λs, βs
 flush(stdout)
-initpwradj = :balance; pwradj = :balance
-imgsize = (40,20); lengthT=1000; jitter=0
+initpwradj = :balance; pwradj = :balance; tol=-1
+imgsize = (40,20); lengthT=1000; jitter=0; ncells=15
 for SNR in SNRs
-    X, imgsz, ncells, fakecells_dic, img_nl, maxSNR_X = loadfakecell("fakecells_sz$(imgsize)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR).jld",
-                                                fovsz=imgsize, ncells=15, lengthT=lengthT, jitter=jitter, SNR=SNR, save=true);
+    X, imgsz, nc, fakecells_dic, img_nl, maxSNR_X = loadfakecell("fakecells_sz$(imgsize)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR).jld",
+                                                fovsz=imgsize, ncells=ncells, lengthT=lengthT, jitter=jitter, SNR=SNR, save=true);
     gtW, gtH, gt_ncells = fakecells_dic["gtW"], fakecells_dic["gtH"], fakecells_dic["gt_ncells"];
-    rt1 = @elapsed W0, H0, Mw, Mh, Wp, Hp = initsemisca(X, ncells, poweradjust=initpwradj, use_nndsvd=true)
-    Mw0, Mh0 = copy(Mw), copy(Mh);
+    rt1 = @elapsed W0, H0, Mw, Mh, Wcd, Hcd = initsemisca(X, ncells, poweradjust=initpwradj, use_nndsvd=true)
+    Wcd0, Hcd0 = copy(Wcd), copy(Hcd);
     for λ in λs
         λ1 = λ; λ2 = λ
         for β in βs
             @show SNR, λ, β
             β1 = β; β2 = Wonly ? 0. : β
             flush(stdout)
-            paramstr="_$(sd_group)_L$(order)_lm$(λ)_bw$(β1)_bh$(β2)"
-            fprefix = "Wuc_$(SNR)dB_Convex_$(initpwradj)_$(pwradj)"*paramstr
+            paramstr="_L$(order)_lm$(λ)_bw$(β1)_bh$(β2)"
+            fprefix = "Wcd_$(SNR)dB_Convex_$(initpwradj)_$(pwradj)"*paramstr
             sd_group ∉ [:column, :ac, :pixel] && error("Unsupproted sd_group")
-            Mw, Mh = copy(Mw0), copy(Mh0);
-            rt2 = @elapsed Mw, Mh, f_xs, x_abss, xw_abss, xh_abss, iter = minMwMh!(Mw,Mh,W0,H0,λ1,λ2,β1,β2,maxiter,order;
-                            poweradjust=pwradj, fprefix=fprefix, sd_group=sd_group,SNR=SNR)
+            Wcd, Hcd = copy(Wcd0), copy(Hcd0);
+            rt2 = @elapsed Wcd, Hcd, f_xs, x_abss, xw_abss, xh_abss, iter = minWH!(X,Wcd,Hcd,λ1,λ2,β1,β2,maxiter,order;
+                            poweradjust=pwradj, fprefix=fprefix, sd_group=sd_group, SNR=SNR)
             save(fprefix*"_iter$(iter)_rt$(rt2).jld", "f_xs", f_xs, "x_abss", x_abss, "SNR", SNR, "order", order, "β1", β1, "β2", β2, "rt2", rt2)
-            W2,H2 = copy(W0*Mw), copy(Mh*H0)
+            W2,H2 = copy(Wcd), copy(Hcd)
             normalizeWH!(W2,H2); #imshowW(sortWHslices(W2,H2)[1],imgsz, borderwidth=1);# imshowW(W2,imgsz, borderwidth=1);
             imsaveW(fprefix*"_iter$(iter)_rt$(rt2).png",sortWHslices(W2,H2)[1],imgsz,borderwidth=1)
             ax = plotW([log10.(x_abss) log10.(f_xs) log10.(xw_abss) log10.(xh_abss) ], fprefix*"_plot.png"; title="convergence (SCA)", xlbl = "iteration", ylbl = "log(penalty)",
