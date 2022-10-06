@@ -19,7 +19,9 @@ Images.save("dummy.png",rand(2,2)) # If we didn't call this line before `using P
                             # ImageMagick is used when saving image. That doesn't
                             # properly close the file after saving.
 using PyPlot
-include( ENV["JULIA_DEPOT_PATH"]*"/dev/SymmetricComponentAnalysis/test/testutils.jl")
+scapath = joinpath(dirname(pathof(SymmetricComponentAnalysis)),"..")
+include(joinpath(scapath,"test","testdata.jl"))
+include(joinpath(scapath,"test","testutils.jl"))
 
 plt.ioff()
 

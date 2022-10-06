@@ -20,9 +20,13 @@ Images.save("dummy.png",rand(2,2)) # If we didn't call this line before `using P
                             # ImageMagick is used when saving image. That doesn't
                             # properly close the file after saving.
 using PyPlot
-include( ENV["JULIA_DEPOT_PATH"]*"/dev/SymmetricComponentAnalysis/test/testutils.jl")
+scapath = joinpath(dirname(pathof(SymmetricComponentAnalysis)),"..")
+include(joinpath(scapath,"test","testdata.jl"))
+include(joinpath(scapath,"test","testutils.jl"))
 
 plt.ioff()
+
+ARGS =  ["-10","50","1","true",":column","[100]","[0]"]
 
 SNRs = eval(Meta.parse(ARGS[1])); maxiter = eval(Meta.parse(ARGS[2]))
 order = eval(Meta.parse(ARGS[3])); Wonly = eval(Meta.parse(ARGS[4]));
@@ -32,7 +36,7 @@ sd_group = eval(Meta.parse(ARGS[5])) # subspace descent subspace group (:pixel s
 @show order, Wonly, sd_group
 @show λs, βs
 flush(stdout)
-initpwradj = :balance; pwradj = :balance; tol=-1
+initpwradj = :balance; pwradj = :none; tol=-1
 imgsize = (40,20); lengthT=1000; jitter=0
 for SNR in SNRs
     X, imgsz, ncells, fakecells_dic, img_nl, maxSNR_X = loadfakecell("fakecells_sz$(imgsize)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR).jld",
