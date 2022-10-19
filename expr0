@@ -1,8 +1,4 @@
 #!/bin/bash
 
-# julia         file                         SNRs iter L Wonly sd_grp lambda betas
-# cbyc, L1
-julia $MYSTORAGE/work/julia/sca/scaexpr.jl [60] 50 1 true :column [0] [1,5] # ["-10","500","2","false",":column","[100]","[0.0]"]
-julia $MYSTORAGE/work/julia/sca/scacdexpr.jl [60] 50 1 true :column [0] [0.1] # ["-10","500","2","false",":column","[100]","[0.0]"]
-julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 50 1 true :column [0] [5] # ["-10","500","2","false",":column","[100]","[0.0]"]
-#julia $MYSTORAGE/work/julia/sca/convexcdexpr.jl [60] 50 1 true :column [0] [0.7] # ["-10","500","2","false",":column","[100]","[0.0]"]
+# julia         file                        SNRs iter L Wonly sd_grp lmda beta pwradj weighted
+julia $MYSTORAGE/work/julia/sca/convexexpr.jl [10] 50 1 true :column [0] [0.1,0.3] :balance2 :none

@@ -2,6 +2,4 @@
 
 # julia         file                         SNRs iter L Wonly sd_grp lambda betas
 # cbyc, L2, Wonly
-julia $MYSTORAGE/work/julia/sca/convexexpr.jl [20] 50 2 true :column [0] [1.0,10,100,1000]
-julia $MYSTORAGE/work/julia/sca/convexexpr.jl [20] 50 2 true :column [5000] [0.0001,0.001,0.01,0.1,1.0,10,100,1000]
-julia $MYSTORAGE/work/julia/sca/convexexpr.jl [-10] 50 2 true :column [0,5000] [0.0001,0.001,0.01,0.1,1.0,10,100,1000]
+julia $MYSTORAGE/work/julia/sca/convexexpr.jl [\"face\"] 50 1 true :column [0] [10] :none :decimate
