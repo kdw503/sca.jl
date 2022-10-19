@@ -1,15 +1,4 @@
 #!/bin/bash
 
-# julia         file                         SNRs iter L Wonly sd_grp lambda betas
-julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 30 1 false :column [800,3000] [0]
-# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 2 1 true :pixel 0.1 [0.0]
-# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 2 2 false :pixel 0.1 [0.0]
-# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 2 2 true :pixel 0.1 [0.0]
-# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 2 1 false :pixel 0. [0.0001]
-# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 2 1 true :pixel 0. [0.0001]
-# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 2 2 false :pixel 0. [0.0001]
-# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 2 2 true :pixel 0. [0.0001]
-# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 2 1 false :pixel 0.1 [0.0001]
-# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 2 1 true :pixel 0.1 [0.0001]
-# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 2 2 false :pixel 0.1 [0.0001]
-# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 2 2 true :pixel 0.1 [0.0001]
+# julia         file                        SNRs iter L Wonly sd_grp lmda beta pwradj weighted
+julia $MYSTORAGE/work/julia/sca/convexexpr.jl [10] 50 1 true :column [0] [10] :none :none
