@@ -29,7 +29,8 @@ include(joinpath(scapath,"test","testutils.jl"))
 plt.ioff()
 
 # ARGS =  ["[\"face\"]","5","1","true",":column","[0]","[5]",":none",":decimate"]
-# ARGS =  ["[10]","50","1","true",":column","[0]","[0.2]",":balance3",":none"]
+# ARGS =  ["[10]","50","1","true",":column","[0]","[0.5]",":balance3",":none"]
+# julia C:\Users\kdw76\WUSTL\Work\julia\sca\convexexpr.jl [10] 50 1 true :column [0] [0.5] :balance3 :none
 SNRs = eval(Meta.parse(ARGS[1])); maxiter = eval(Meta.parse(ARGS[2]))
 order = eval(Meta.parse(ARGS[3])); Wonly = eval(Meta.parse(ARGS[4]));
 sd_group = eval(Meta.parse(ARGS[5])) # subspace descent subspace group (:pixel subspace is same as CD)
