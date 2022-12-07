@@ -28,5 +28,6 @@ Manifest.toml
 *.avi
 *.tif
 *.jld
+*.mat
 *workspace
 Thumbs.db

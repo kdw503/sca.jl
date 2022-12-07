@@ -19,8 +19,8 @@ plt.ioff()
 #ARGS =  ["[:fakecell]","[20]","200","[0]","[0,0.01,0.1,0.5,1.0,1.5]",":cd"]
 #ARGS =  ["[:fakecell]","[40]","1","[0]","[0.1]",":sca","10:2:14","false"] # Best : false means using Convex.jl
 #ARGS =  ["[:fakecell]","-20:1:-18","1","[0]","[0.1]",":sca","[15]","false"] # Best : false means using Convex.jl
-#ARGS =  ["[:fakecell]","[10]","200","[0]","[1.5]",":sca","[15]","false"]
-#ARGS =  ["[:cbclface]","[20]","100","[100]","[4]",":sca"] # Best
+#ARGS =  ["[:fakecell]","[20]","50","[0]","[1.5]",":sca","[15]","false"]
+#ARGS =  ["[:cbclface]","[20]","500","[100]","[4]",":sca"] # Best
 #ARGS =  ["[:cbclface]","[20]","200","[0]","[0.1]",":cd"] # Best
 #ARGS =  ["[:orlface]","[20]","200","[0]","[1.5]",":sca"] # Best
 #ARGS =  ["[:orlface]","[20]","200","[0]","[0.1]",":cd"] # Best
@@ -36,10 +36,9 @@ maxiter = eval(Meta.parse(ARGS[3])); λs = eval(Meta.parse(ARGS[4]));
 βs = eval(Meta.parse(ARGS[5])); # be careful spaces in the argument
 method = eval(Meta.parse(ARGS[6])); αs = eval(Meta.parse(ARGS[5]))
 nclsrng = eval(Meta.parse(ARGS[7])); usingFastSCA = eval(Meta.parse(ARGS[8]))
-weighted=:none; Msparse = false
 order = 1; Wonly = true; sd_group = :column; ls_method = :sca_full;
 initmethod = :nndsvd; initfn = SCA.nndsvd2; initpwradj = :balance;
-pwradj = :balance2; tol=-1 # -1 means don't use convergence criterion
+pwradj = :balance3; tol=-1 # -1 means don't use convergence criterion
 makepositive = false; # flip W[:,i] and H[i,:] to make mostly positive
 savefigure = true
 @show datasets, SNRs, maxiter
@@ -50,10 +49,10 @@ dataset = datasets[1]; SNR = SNRs[1]; λ = λs[1]; λ1 = λ; λ2 = λ;
 for dataset in datasets
     rt1s=[]; rt2s=[]; mssds=[]; mssdHs=[]
     for SNR in SNRs # this can be change ncellss, factors
-        X, imgsz, lengthT, ncells0, gtncells, datadic = load_data(dataset; SNR=SNR, save_gtimg=(false&&savefigure))
+        X, imgsz, lengthT, ncells0, gtncells, datadic = load_data(dataset; SNR=SNR, save_gtimg=(true&&savefigure))
         SNRstr = dataset == :fakecell ? "_$(SNR)dB" : ""
         for ncls in nclsrng
-        ncells = dataset ∈ [:fakecell, :neurofinder] ? ncls : ncells0
+        ncells = dataset != :fakecell ? ncells0 : ncls
         initdatastr = "_$(dataset)$(SNRstr)_nc$(ncells)"
         if method == :sca
             rt1 = @elapsed W0, H0, Mw, Mh, Wp, Hp = initsemisca(X, ncells, poweradjust=initpwradj,
@@ -72,7 +71,6 @@ for dataset in datasets
                     flush(stdout)
                     paramstr="_L$(order)_λw$(λ1)_λh$(λ2)_βw$(β1)_βh$(β2)"
                     fprefix2 = fprefix1*"_$(pwradj)"*paramstr
-                    Mw, Mh = copy(Mw0), copy(Mh0) # reload initialized Mw, Mh
                     if usingFastSCA
                         stparams = StepParams(β1=β1, β2=β2, λ1=λ1, λ2=λ2, reg=:WkHk, order=order, hfirst=true, processorder=:none,
                                 poweradjust=pwradj, method=:cbyc_uc, rectify=:pinv, objective=:normal, option=1)
@@ -80,13 +78,14 @@ for dataset in datasets
                                 iterations_to_show=[15])
                         cparams = ConvergenceParams(allow_f_increases = true, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
                                 x_abstol=tol, successive_f_converge=2, maxiter=maxiter, store_trace=true, show_trace=true)
+                        Mw, Mh = copy(Mw0), copy(Mh0) # reload initialized Mw, Mh
                         rt2 = @elapsed W1, H1, objvals, trs = semiscasolve!(W0, H0, Mw, Mh; stparams=stparams, lsparams=lsparams, cparams=cparams);
                         x_abss, xw_abss, xh_abss, f_xs, f_rel, semisympen, regW, regH = getdata(trs)
                         W2,H2 = copy(W1), copy(H1); iter = length(trs)
                     else
-                        @show pwradj
+                        Msparse = false; weighted = :none
                         rt2 = @elapsed Mw, Mh, f_xs, x_abss, xw_abss, xh_abss, iter, trs = minMwMh!(Mw,Mh,W0,H0,λ1,λ2,β1,β2,maxiter,
-                                Msparse, order; poweradjust=pwradj, fprefix=fprefix2, sd_group=sd_group, SNR=SNR, store_trace=false,
+                                Msparse,order; poweradjust=pwradj, fprefix=fprefix2, sd_group=sd_group, SNR=SNR, store_trace=false,
                                 show_figure=false, weighted=weighted, decifactor=4)
                         W2,H2 = copy(W0*Mw), copy(Mh*H0)
                         fprefix2 = "CVX_"*fprefix2
@@ -102,7 +101,6 @@ for dataset in datasets
                         plotH_data(dataset,fprefix3,H3)
                     end
                     push!(rt2s,rt2)
-                    save("$(fprefix3).jld","W0",W0,"H0",H0,"Mw",Mw,"Mh",Mh)
 
                     if dataset == :fakecell
                         gtW = datadic["gtW"]; gtH = datadic["gtH"]
@@ -114,7 +112,7 @@ for dataset in datasets
                         savefigure && imsave_data(dataset,fprefix3,W3[:,neworder],H3[neworder,:],imgsz,100;
                             mssdwstr="_MSE"*@sprintf("%1.4f",mssd), mssdhstr="_MSE"*@sprintf("%1.4f",mssdH), saveH=true)
                         push!(mssds,mssd); push!(mssdHs, mssdH)
-                    elseif dataset ∈ [:urban, :cbclface, :orlface]
+                    elseif dataset == :urban
                         savefigure && imsave_reconstruct_urban(fprefix3,X,W3,H3,imgsz; index=100)
                     end
                 end
@@ -158,7 +156,6 @@ for dataset in datasets
                     plotH_data(dataset,fprefix3,Hcd1)
                 end
                 push!(rt2s,rt2)
-                save("$(fprefix3).jld","Wcd",Wcd1,"Hcd",Hcd1)
 
                 if dataset == :fakecell
                     gtW = datadic["gtW"]; gtH = datadic["gtH"]
@@ -170,8 +167,8 @@ for dataset in datasets
                     savefigure && imsave_data(dataset,fprefix3,Wcd1[:,neworder],Hcd1[neworder,:],imgsz,100;
                         mssdwstr="_MSE"*@sprintf("%1.4f",mssd), mssdhstr="_MSE"*@sprintf("%1.4f",mssdH), saveH=true)
                     push!(mssds,mssd); push!(mssdHs, mssdH)
-                elseif dataset ∈ [:urban, :cbclface, :orlface]
-                    savefigure && imsave_reconstruct(fprefix3,X,Wcd1,Hcd1,imgsz; index=100)
+                elseif dataset == :urban
+                    savefigure && imsave_reconstruct_urban(fprefix3,X,Wcd1,Hcd1,imgsz; index=100)
                 end
             end # for α
         end # if method
@@ -187,6 +184,7 @@ for dataset in datasets
     # TODO : plot ncells vs. rts
     # TODO : plot factors vs. rts
 end
+
 
 # plt.show()
 

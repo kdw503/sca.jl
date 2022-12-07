@@ -28,6 +28,7 @@ include(joinpath(scapath,"test","testutils.jl"))
 plt.ioff()
 
 # ARGS =  ["[\"face\"]","30","1","true",":column","[0]","[0]"]
+ARGS =  ["[\10]","50","1","true",":column","[0]","[0]"]
 SNRs = eval(Meta.parse(ARGS[1])); maxiter = eval(Meta.parse(ARGS[2]))
 order = eval(Meta.parse(ARGS[3])); Wonly = eval(Meta.parse(ARGS[4]));
 sd_group = eval(Meta.parse(ARGS[5])) # subspace descent subspace group (:pixel subspace is same as CD)
