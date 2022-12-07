@@ -1,4 +1,7 @@
 #!/bin/bash
 
 # julia         file                        SNRs iter L Wonly sd_grp lmda beta pwradj weighted
-julia $MYSTORAGE/work/julia/sca/convexexpr.jl [10] 50 1 true :column [0] [10] :none :none
+#julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:neurofinder] [20] 1 [0] [1.5] :sca [40] false
+julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:neurofinder] [20] 100 [0,100] [1] :sca [15] false
+julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:neurofinder] [20] 100 [0,100] [1.5] :sca [15] false
+julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:neurofinder] [20] 100 [0,100] [3,5,6,0.1,] :sca [15] false

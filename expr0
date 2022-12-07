@@ -1,4 +1,8 @@
 #!/bin/bash
 
-# julia         file                        SNRs iter L Wonly sd_grp lmda beta pwradj weighted
-julia $MYSTORAGE/work/julia/sca/convexexpr.jl [10] 50 1 true :column [0] [0.1,0.3] :balance2 :none
+# julia         file                      SNRs iter Msparse L Wonly sd_grp lambda betas pwradj weighted
+# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 50 [0] [0.01,0.05,0.1,0.3] :normalize :balance2 :power1
+
+# julia         file                              SNRs iter  lambda betas method
+#julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:natural] [20] 1 [0] [1.5] :sca
+julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:cbclface] [20] 100 [0] [0.2,0.3,0.5] :cd [15] false
