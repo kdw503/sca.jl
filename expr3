@@ -1,8 +1,3 @@
 #!/bin/bash
-
-# julia         file                         SNRs iter L Wonly sd_grp lambda betas 
-# cbyc, L2
-# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 50 [0] [0.01,0.05,0.1,0.3,0.5,0.7] :balance :balance2 :power1
-
-# julia         file                      SNRs iter  L Wonly sd_grp lambda betas
-julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:neurofinder] [20] 100 [0] [1.5] :sca [40] false
+# julia         file                     datasets SNRs iter lambda betas method ncrng usingFastSCA pw reg sparseinit sd_group usingConvex
+julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:fakecell] [0] 300 [0] [100000] :oca [15] false :normal :W2 false :whole false
