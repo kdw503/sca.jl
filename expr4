@@ -1,5 +1,2 @@
 #!/bin/bash
-
-# julia         file                         SNRs iter L Wonly sd_grp lambda betas
-# cbyc, L2, Wonly
-julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:neurofinder] [20] 100 [100] [1.5] :sca [40] false
+julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:fakecell] [0] 300 [0] [1] :oca [15] false :normal :W1M2 false :column false

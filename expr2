@@ -1,8 +1,3 @@
 #!/bin/bash
-
-# julia         file                      SNRs iter Msparse L Wonly sd_grp lambda betas pwradj weighted
-# cbyc, L1, Wonly
-# julia $MYSTORAGE/work/julia/sca/convexexpr.jl [60] 50 [0] [5,7,10,100] :normalize :balance2 :power1
-
-# julia         file                      SNRs iter  L Wonly sd_grp lambda betas method nclsrng usingFastSCA
-julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:cbclface] [20] 100 [100] [5] :sca [15] false
+# julia         file                     datasets SNRs iter lambda betas method ncrng usingFastSCA pw reg sparseinit sd_group usingConvex
+julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:fakecell] [0] 300 [0] [10000] :oca [15] false :normal :W2 false :whole false

@@ -31,6 +31,31 @@ function load_orl()
 end
 
 # :natural : 12X12, lengthT=100000, ncomponents = 72
+function load_natural(;num_trials=1000, batch_size=100, sz=12, BUFF=4) # BUFF(border margin)
+    frn = "IMAGES.mat"
+    dd = matread(frn); img = dd["IMAGES"]
+    
+    lengthT = num_trials*batch_size
+    imgsz = (sz, sz); l=sz^2
+    num_images=size(img,3); image_size=512
+    X=zeros(l,lengthT);
+    for t=1:num_trials
+        # choose an image for this batch
+        i=Int(ceil(num_images*rand()));
+        this_image=img[:,:,i] #reshape(IMAGES(:,i),image_size,image_size)';
+        # extract subimages at random from this image to make data vector X(64 X batch_size)
+        for i=1:batch_size
+            r=Int(BUFF+ceil((image_size-sz-2*BUFF)*rand()));
+            c=Int(BUFF+ceil((image_size-sz-2*BUFF)*rand()));
+            patchp = this_image[r:r+sz-1,c:c+sz-1]
+            X[:,(t-1)*batch_size+i]=reshape(patchp,l,1)
+        end
+    end
+    ncells=72
+    X, imgsz, lengthT, ncells, 0, Dict()
+end
+
+# :natural : 12X12, lengthT=100000, ncomponents = 72
 function load_onoffnatural(;num_trials=1000, batch_size=100, sz=12, BUFF=4) # BUFF(border margin)
     frn = "IMAGES.mat"
     dd = matread(frn); img = dd["IMAGES"]
@@ -103,6 +128,9 @@ function load_data(dataset; SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, 
         println("loading ORL face dataset")
         load_orl()
     elseif dataset == :natural
+        println("loading natural image")
+        load_natural()
+    elseif dataset == :onoffnatural
         println("loading On/OFF-contrast filtered natural image")
         load_onoffnatural()
     elseif dataset == :urban
@@ -132,6 +160,9 @@ function imsave_data(dataset,fprefix,W,H,imgsz,lengthT; mssdwstr="", mssdhstr=""
         println("Saving image of ORL face dataset")
         imsave_orl(fprefix,W,H,imgsz,lengthT)
     elseif dataset == :natural
+        println("Saving image of natural image")
+        imsave_natural(fprefix,W,H,imgsz,lengthT)
+    elseif dataset == :onoffnatural
         println("Saving image of On/OFF-contrast filtered natural image")
         imsave_onoffnatural(fprefix,W,H,imgsz,lengthT)
     elseif dataset == :urban
@@ -175,12 +206,12 @@ end
 
 function imsave_reconstruct(fprefix,X,W,H,imgsz; index=100, gridcols=7, clamp_level=1.0) # 0.2 for urban
     # TODO: save all face pictures
-    # imsave("clcl_faces.png", X[:,1:49], imgsz;; gridcols=7, borderwidth=1, colors=bbw())
+    # imsave("cbcl_faces.png", X[:,1:49], imgsz;; gridcols=7, borderwidth=1, colors=bbw())
     intplimg = interpolate(reshape(H[:,index],gridcols,gridcols),3)
     imsaveW(fprefix*"_H$(index).png",reshape(intplimg,length(intplimg),1),size(intplimg))
     reconimg = W*H[:,index]
     W_max = maximum(abs,reconimg)*clamp_level; W_clamped = clamp.(reconimg,0.,W_max)
-    # save(fprefix*"_Org$index.png", map(clamp01nan, reshape(X[:,index],imgsz...)))
+    #save(fprefix*"_Org$index.png", map(clamp01nan, reshape(X[:,index],imgsz...)))
     save(fprefix*"_recon$index.png", map(clamp01nan, reshape(W_clamped,imgsz...)))
 end
 
@@ -188,6 +219,10 @@ function imsave_orl(fprefix,W,H,imgsz,tlength; gridcols=Int(ceil(sqrt(size(W,2))
     imsaveW(fprefix*"_W.png", W, imgsz; gridcols=gridcols, borderwidth=borderwidth, colors=signedcolors)
 end
 
+function imsave_natural(fprefix,W,H,imgsz,tlength; gridcols=12, borderwidth=1, signedcolors=bgw())
+    imsaveW(fprefix*"_W.png", W, imgsz; gridcols=gridcols, borderwidth=borderwidth, colors=signedcolors)
+ end
+ 
 function imsave_onoffnatural(fprefix,W,H,imgsz,tlength; gridcols=12, borderwidth=1, signedcolors=bgw())
    l = imgsz[1]^2; W = W[1:l,:]-W[l+1:2*l,:]
    imsaveW(fprefix*"_W.png", W, imgsz; gridcols=gridcols, borderwidth=borderwidth, colors=signedcolors)
@@ -224,7 +259,7 @@ function imsave_fakecell(fprefix,W,H,imgsz,tlength; mssdwstr="", mssdhstr="",
 end
 
 #=========== Plot Convergence ====================================================#
-function plot_convergence(fprefix,x_abss, xw_abss, xh_abss, f_xs; title="")
+function plot_convergence(fprefix, x_abss, xw_abss, xh_abss, f_xs; title="")
     xlbl = "iteration"; ylbl = "log10(penalty)"
     lstrs = ["log10(f_x)", "log10(x_abs)", "log10(xw_abs)", "log10(xh_abs)"]
     logfx = log10.(f_xs); logxabs = log10.(x_abss);
@@ -236,6 +271,20 @@ function plot_convergence(fprefix,x_abss, xw_abss, xh_abss, f_xs; title="")
             legendstrs = [lstrs[1]], legendloc=1)
     ax = plotW([logxabs logxw logxh], fprefix*"_plot_xabs.png"; title=title, xlbl=xlbl,
             ylbl="", legendloc=1, arrange=:combine, legendstrs = lstrs[2:4])
+    ax
+end
+
+function plot_convergence(fprefix, x_abss, f_xs; title="")
+    xlbl = "iteration"; ylbl = "log10(penalty)"
+    lstrs = ["log10(f_x)", "log10(x_abs)"]
+    logfx = log10.(f_xs); logxabs = log10.(x_abss);
+    ax = plotW([logfx logxabs], fprefix*"_plot_all.png"; title=title,
+            xlbl=xlbl, ylbl="", legendloc=1, arrange=:combine, legendstrs=lstrs)
+            #,axis=[480,1000,-0.32,-0.28])
+    ax = plotW(logfx, fprefix*"_plot_fx.png"; title=title, xlbl=xlbl, ylbl=ylbl,
+            legendstrs = [lstrs[1]], legendloc=1)
+    ax = plotW(logxabs, fprefix*"_plot_xabs.png"; title=title, xlbl=xlbl, ylbl="",
+            legendstrs = [lstrs[2]], legendloc=1)
     ax
 end
 
