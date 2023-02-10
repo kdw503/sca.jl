@@ -211,7 +211,7 @@ function plotP(penP1, penP2, penP3, penP4, penP5, extent, vmaxP)
     # ax.set_xticklabels(ticklabels)
     # ax.set_yticks(ticks)
     # ax.set_yticklabels(ticklabels)
-    ax.set_title("∥(B*x)₊∥²")
+    ax.set_title("∥(B*x)₋∥²")
 
     ax = axs[4]
     himg4 = ax.imshow(reverse(penP4; dims=1); extent = extent, vmin=0, vmax=vmaxP)
@@ -266,10 +266,11 @@ A = [  0.642854 0.406794;-0.728747 -1.3357]
 b = [-0.7763834317899838, -0.4248008996625347]
 B = [ -0.216811 -0.362751; -1.15347 -0.0527866]
 C = [ -0.0681416 0.739463; -1.02285 -0.154347]
+δ=0
 x = Variable(2)
 pen_data(x) = norm(A*x - b,2)^2
 pen_nn(x) = norm(min.(0,B*x))^2
-pen_spars1(x) = norm(C*x, 1)
+pen_spars1(x) = sum(sqrt.((C*x).^2 .+ δ)) # sqrt(norm(C*x,1)^2+δ) # sqrt(norm(C*x)^2+δ)
 pen_spars2(x) = norm(x, 2)
 problem = minimize(sumsquares(A*x - b) + sumsquares(min(0,B*x)) + sumsquares(x))
 solve!(problem, ECOS.Optimizer; silent_solver = true)
@@ -282,7 +283,7 @@ axs = plotP(pensum, penP1, penP2, penP3, penP4, extent, vmax)
 ax = axs[1]
 ax.plot([xsol[1]], [xsol[2]], color="red", marker="x", linewidth = 3)
 
-plt.savefig("convex2dplot.png")
+plt.savefig("convex2Dplot_delta$(δ).png")
 
 slope = 4; αs = -1:0.01:1
 fs = zeros(length(αs),5)
@@ -296,5 +297,5 @@ for (i,α) in enumerate(αs)
     fs[i,5] = pen_spars2(x)
     fs[i,1] = fs[i,2]+100fs[i,3]+2fs[i,4]+2fs[i,5]
 end
-plotW(-10:0.1:10,fs,"convex_plot.png"; title="", xlbl = "α", ylbl = "penalty",
+plotW(-10:0.1:10,fs,"convex1Dplot_delta$(δ).png"; title="", xlbl = "α", ylbl = "penalty",
                 legendstrs = ["1","1","1","1","1"], legendloc=0, arrange=:horizontal)

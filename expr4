@@ -1,2 +1,2 @@
 #!/bin/bash
-julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:fakecell] [0] 300 [0] [1] :oca [15] false :normal :W1M2 false :column false
+julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:fakecell] [60] 600 [100] [0] :fastoca [15] :normal :W1 false :column :sca_full
