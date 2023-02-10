@@ -1,3 +1,8 @@
+"""
+TODO list
+- gradient and hessian of cbyc :W1 sparseness should be documented
+- power weighted version-2 need to be implemented
+"""
 using Pkg
 
 if Sys.iswindows()
@@ -20,19 +25,19 @@ plt.ioff()
 # objective = :normal, :pw, :weighted or :weighted2
 # regularization = Fast SCA(:W1M2,:M1,:M2,:W1,:W2), SCA(:W1M2,:W1Mn) or OCA()
 # sd_group = :whole, :component, :column or :pixel
-#ARGS =  ["[:fakecell]","[0]","500","[0]","[10]",":fastoca","[15]","false",":normal",":W1","false",":column","false"]
+#           dataset,   SNRs, maxiter, λs, βs,    method,   nclsrng, objective, reg, usingSCAinit, sd_group, ls_method
+#ARGS =  ["[:fakecell]","[60]","50","[0]","[1]",":cgoca","[15]",":normal",":W1","false",":whole", ":ls_BackTracking"]
 datasets = eval(Meta.parse(ARGS[1])); SNRs = eval(Meta.parse(ARGS[2]))
-maxiter = eval(Meta.parse(ARGS[3])); λs = eval(Meta.parse(ARGS[4])); # be careful not to have spaces in the argument
+maxiter = eval(Meta.parse(ARGS[3])); λs = eval(Meta.parse(ARGS[4])) # be careful not to have spaces in the argument
 βs = eval(Meta.parse(ARGS[5])); αs = βs
 method = eval(Meta.parse(ARGS[6])); nclsrng = eval(Meta.parse(ARGS[7]));
-usingFastSCA = eval(Meta.parse(ARGS[8])); objective = eval(Meta.parse(ARGS[9]))
-regularization = eval(Meta.parse(ARGS[10])); usingSCAinit = eval(Meta.parse(ARGS[11]))
-sd_group = eval(Meta.parse(ARGS[12])); useConvex = eval(Meta.parse(ARGS[13]))
-weighted=:none; Msparse = false; rectify = :none # (rectify,λ)=(:pinv,0) (cbyc_sd method)
-order = regularization ∈ [:W1,:W1M2] ? 1 : 2
-Wonly = true; ls_method = :sca_full;
-initmethod = method ∈ [:oca, :fastoca] ? :isvd : :nndsvd; initfn = SCA.nndsvd2
-initpwradj = (objective == :pw && !usingSCAinit) ? :wh_normalize : :balance # :wh_normalize for power weighted one
+objective = eval(Meta.parse(ARGS[8])); regularization = eval(Meta.parse(ARGS[9]))
+usingSCAinit = eval(Meta.parse(ARGS[10])); sd_group = eval(Meta.parse(ARGS[11]))
+ls_method = eval(Meta.parse(ARGS[12]))
+useConvex = true; weighted=:none; Msparse = false; rectify = :none # (rectify,λ)=(:pinv,0) (cbyc_sd method)
+order = regularization ∈ [:W1,:W1M2] ? 1 : 2; regWonly = true
+initmethod = method ∈ [:oca, :fastoca, :cgoca, :ntoca] ? :isvd : :nndsvd; initfn = SCA.nndsvd2
+initpwradj = (objective == :pw && !usingSCAinit) ? :wh_normalize : :balance # :wh_normalize for ||D-MwMh||^2
 pwradj = :none; tol=-1 # -1 means don't use convergence criterion
 makepositive = false; # flip W[:,i] and H[i,:] to make mostly positive
 savefigure = true
@@ -40,7 +45,7 @@ savefigure = true
 @show λs, βs, method, αs, nclsrng
 flush(stdout)
 dataset = datasets[1]; SNR = SNRs[1]; λ = λs[1]; λ1 = λ; λ2 = λ;
-β = βs[1]; β1 = β; β2 = Wonly ? 0. : β; α = αs[1]; ncls = nclsrng[1]
+β = βs[1]; β1 = β; β2 = regWonly ? 0. : β; α = αs[1]; ncls = nclsrng[1]
 for dataset in datasets
     rt1s=[]; rt2s=[]; mssds=[]; mssdHs=[]
     for SNR in SNRs # this can be change ncellss, factors
@@ -49,19 +54,19 @@ for dataset in datasets
         for ncls in nclsrng
         ncells = dataset ∈ [:fakecell, :neurofinder] ? ncls : ncells0
         initdatastr = "_$(dataset)$(SNRstr)_nc$(ncells)"
-        if method ∈ [:sca, :fastsca, :oca, :fastoca]
+        if method ∈ [:sca, :fastsca, :oca, :cgoca, :ntoca, :fastoca]
             if usingSCAinit
-                beta=0.001; lambda = 0.0; initmaxiter=400
+                beta=0.01; lambda = 0.0; initmaxiter=400
                 initstr = "spb$(beta)l$(lambda)i$(initmaxiter)"
                 fpfix = "SCAinit$(initstr)$(initdatastr)_$(initpwradj)"
                 if isfile(fpfix*".jld")
                     dd = load(fpfix*".jld")
-                    X=dd["X"]; W0=dd["W0"]; H0=dd["H0"]; Mw=dd["Mw"]; Mh=dd["Mh"]; D=dd["D"]; rt1=dd["rt1"]
+                    X=dd["X"]; W0=dd["W0"]; H0=dd["H0"]; Mw=dd["Mw"]; Mh=dd["Mh"]; d=dd["d"]; rt1=dd["rt1"]
                 else
                     @show "Calculating Mw and Mh initialization..."
-                    rt1 = @elapsed W0, H0, Mw, Mh, D, Epre, E, _ = initMwMhSparse(X, ncells, beta, lambda,
-                        maxiter=initmaxiter, poweradjust=initpwradj)
-                    save(fpfix*".jld","X",X,"W0",W0,"H0",H0,"Mw",Mw,"Mh",Mh,"D",D,"β",beta,"rt1",rt1)
+                    rt1 = @elapsed W0, H0, Mw, Mh, d = initMwMhSparse(X, ncells, beta, lambda,
+                        innermaxiter=initmaxiter, poweradjust=initpwradj)
+                    save(fpfix*".jld","X",X,"W0",W0,"H0",H0,"Mw",Mw,"Mh",Mh,"d",d,"β",beta,"rt1",rt1)
                 end
                 if initpwradj == :balance && objective == :pw
                     normw0 = norm.(eachcol(W0)); normh0 = norm.(eachrow(H0))
@@ -69,17 +74,17 @@ for dataset in datasets
                         W0[:,i] ./= normw0[i]; H0[i,:] ./= normh0[i]
                         Mw[i,:] .*= normw0[i]; Mh[:,i] .*= normh0[i]
                     end
-                    D = normw0.*normh0
+                    d = normw0.*normh0
                 end
             else
                 @show initmethod, initpwradj
-                rt1 = @elapsed W0, H0, Mw, Mh, Wp, Hp, D = initsemisca(X, ncells, poweradjust=initpwradj,
+                rt1 = @elapsed W0, H0, Mw, Mh, Wp, Hp, d = initsemisca(X, ncells, poweradjust=initpwradj,
                                             initmethod=initmethod, initfn=initfn)
                 initstr = "$(initmethod)"
             end
             fprefix0 = "SCAinit$(initstr)$(initdatastr)_$(initpwradj)_rt"*@sprintf("%1.2f",rt1)
             Mw0, Mh0 = copy(Mw), copy(Mh)
-            W1,H1 = copy(W0*Mw), copy(Mh*H0); normalizeWH!(W1,H1)
+            W1,H1 = copy(W0*Mw), copy(Mh*H0); normalizeW!(W1,H1)
             savefigure && imsave_data(dataset,fprefix0,W1,H1,imgsz,lengthT; saveH=false)
             if dataset == :fakecell
                 gtW = datadic["gtW"]; gtH = datadic["gtH"]
@@ -100,55 +105,68 @@ for dataset in datasets
                 λ1 = λ; λ2 = λ
                 for β in βs
                     @show SNR, ncells, λ, β
-                    β1 = β; β2 = Wonly ? 0. : β
+                    β1 = β; β2 = regWonly ? 0. : β
                     flush(stdout)
                     paramstr="_Obj$(objective)_Reg$(regularization)_λw$(λ1)_λh$(λ2)_βw$(β1)_βh$(β2)"
                     fprefix2 = fprefix1*"_$(pwradj)"*paramstr
                     Mw, Mh = copy(Mw0), copy(Mh0) # reload initialized Mw, Mh
                     if method == :fastsca # Fast Symmetric Component Analysis
                         stparams = StepParams(β1=β1, β2=β2, λ1=λ1, λ2=λ2, reg=regularization, order=order, hfirst=true, processorder=:none,
-                                poweradjust=pwradj, method=:cbyc_uc, rectify=rectify, objective=objective, option=1)
+                                poweradjust=pwradj, method=:cbyc_uc, rectify=rectify, objective=objective)
                         lsparams = LineSearchParams(method=ls_method, c=0.5, α0=2.0, ρ=0.5, maxiter=maxiter, show_lsplot=false,
                                 iterations_to_show=[15])
                         cparams = ConvergenceParams(allow_f_increases = true, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
                                 x_abstol=tol, successive_f_converge=2, maxiter=maxiter, store_trace=true, show_trace=true)
-                        rt2 = @elapsed W1, H1, objvals, trs = scasolve!(W0, H0, D, Mw, Mh; stparams=stparams, lsparams=lsparams, cparams=cparams);
+                        rt2 = @elapsed W1, H1, objvals, trs = scasolve!(W0, H0, d, Mw, Mh; stparams=stparams, lsparams=lsparams, cparams=cparams);
                         x_abss, xw_abss, xh_abss, f_xs, f_rel, semisympen, regW, regH = getdata(trs)
                         W2,H2 = copy(W1), copy(H1); iter = length(trs)
+                        fprefix3 = "SCA_$(sd_group)_"*fprefix2
                     elseif method == :sca # Symmetric Component Analysis
-                        rt2 = @elapsed Mw, Mh, f_xs, x_abss, xw_abss, xh_abss, iter, trs = minMwMh!(W0,H0,D,Mw,Mh,λ1,λ2,β1,β2,maxiter,
-                                Msparse, order; poweradjust=pwradj, fprefix=fprefix2, sd_group=sd_group, SNR=SNR, useConvex=useConvex,
-                                store_trace=false, show_lsplot=false, weighted=weighted, decifactor=4)
+                        rt2 = @elapsed Mw, Mh, f_xs, x_abss, xw_abss, xh_abss, iter, trs = minMwMh!(W0,H0,d,Mw,Mh,λ1,λ2,β1,β2,maxiter,
+                                Msparse, order; poweradjust=pwradj, sd_group=sd_group, useConvex=useConvex, store_trace=false,
+                                show_lsplot=false, weighted=weighted, decifactor=4)
                         W2,H2 = copy(W0*Mw), copy(Mh*H0)
-                        fprefix2 = useConvex ? "CVXSCA_"*fprefix2 : "OptSCA_"*fprefix2
-                    elseif method ∈ [:oca,:fastoca] # Orthogonal Component Analysis
+                        fprefix3 = (useConvex ? "CVX" : "Opt")*"SCA_$(sd_group)_"*fprefix2
+                    elseif method ∈ [:fastoca, :ntoca, :cgoca] # Fast Orthogonal Component Analysis
+                        (ocastr, ocamethod) = method == :fastoca ? ("cbycNT",:cbyc_uc) : method == :ntoca ? ("NT",:whole_uc) : ("CG",:whole_uc_cg)
+                        stparams = StepParams(β1=β1, β2=0, λ1=λ1, λ2=0, reg=regularization, order=order, method=ocamethod,
+                                objective=objective,useprecond=true)
+                        lsparams = LineSearchParams(method=ls_method, c=0.5, α0=1.0, ρ=0.5, maxiter=50, show_lsplot=true,
+                                iterations_to_show=[1,2,3,4,5,6,7,8,9])
+                        cparams = ConvergenceParams(allow_f_increases = false, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
+                                x_abstol=tol, successive_f_converge=2, maxiter=maxiter, store_trace=true, show_trace=true)
+                        rt2 = @elapsed W2, objvals, trs = ocasolve!(W0, Mw, d; stparams=stparams, lsparams=lsparams, cparams=cparams);
+                        x_abss, xw_abss, xh_abss, f_xs, f_rel, orthogpen, regW, regH = getdata(trs)
+                        iter = length(trs)
+                        H2 = W2\X
+                        ls_methodstr = ls_method == :sca_full ? "scabt_" :
+                                       ls_method == :ls_BackTracking ? "lsbt_" :
+                                       ls_method == :ls_HagerZhang ? "lshz_" : "none_"
+                        fprefix3 = "OCA_$(ocastr)_$(sd_group)_$(ls_methodstr)"*fprefix2
+                    elseif method ∈ [:oca] # Orthogonal Component Analysis
                         sd_group == :column && (innermaxiter=100; outermaxiter=maxiter; iiterstr = method == :oca ? "ii$(innermaxiter)_" : "")
                         sd_group == :whole && (innermaxiter=maxiter; outermaxiter=1; iiterstr="")
-                        useOptim = method == :oca ? true : false
-                        lsparams = LineSearchParams(method=:sca_full, c=0.5, α0=2.0, ρ=0.5, maxiter=50, show_lsplot=true,
-                                iterations_to_show=[1,2,3,4])
-                        rt2 = @elapsed Mw, Mh, f_xs, x_abss, iter, trs = minOrthogMw!(W0,Mw,λ1,β1,outermaxiter,innermaxiter, Msparse, order;
-                                useOptim=useOptim, fprefix=fprefix2, sd_group=sd_group, SNR=SNR, show_trace=false, store_trace=false,
-                                lsparams=lsparams)
+                        rt2 = @elapsed Mw, Mh, d, f_xs, x_abss, iter, trs = minOrthogMw!(W0,Mw,d,λ1,β1,outermaxiter,innermaxiter, order;
+                                sd_group=sd_group, show_trace=false, store_trace=false)
                         W2,H2 = copy(W0*Mw), copy(Mh*H0)
-                        fprefix2 = "OptOCA_$(sd_group)_$(iiterstr)"*fprefix2
+                        fprefix3 = "OCA_opt_$(sd_group)_$(iiterstr)"*fprefix2
                     end
-                    normalizeWH!(W2,H2); W3,H3 = sortWHslices(W2,H2)
+                    normalizeW!(W2,H2); W3,H3 = sortWHslices(W2,H2)
                     # make W components be positive mostly
                     makepositive && flip2makepos!(W3,H3)
                     # save W and H image data and plot
                     iter = sd_group == :whole ? maxiter : iter 
-                    fprefix3 = fprefix2*"_iter$(iter)_rt"*@sprintf("%1.2f",rt2)
+                    fprefix4 = fprefix3*"_iter$(iter)_rt"*@sprintf("%1.2f",rt2)
                     if savefigure
-                        imsave_data(dataset,fprefix3,W3,H3,imgsz,100; saveH=true)
+                        imsave_data(dataset,fprefix4,W3,H3,imgsz,100; saveH=true)
                         length(f_xs) < 2 || begin
-                            method ∈ [:fastoca, :oca] ? plot_convergence(fprefix3,x_abss,f_xs; title="convergence (SCA)") : 
-                                                        plot_convergence(fprefix3,x_abss,xw_abss,xh_abss,f_xs; title="convergence (SCA)")
+                            method ∈ [:fastoca, :ntoca, :cgoca, :oca] ? plot_convergence(fprefix4,x_abss,f_xs; title="convergence (SCA)") : 
+                                                        plot_convergence(fprefix4,x_abss,xw_abss,xh_abss,f_xs; title="convergence (SCA)")
                         end
-                        plotH_data(dataset,fprefix3,H3)
+                        plotH_data(dataset,fprefix4,H3)
                     end
                     push!(rt2s,rt2)
-                    save("$(fprefix3).jld","W0",W0,"H0",H0,"Mw",Mw,"Mh",Mh)
+                    save(fprefix4*".jld","W0",W0,"H0",H0,"Mw",Mw,"Mh",Mh)
 
                     if dataset == :fakecell
                         gtW = datadic["gtW"]; gtH = datadic["gtH"]
@@ -157,12 +175,12 @@ for dataset in datasets
                         mssdH = ssdH(ml, gtH,H3')
                         # reorder according to GT image
                         neworder = matchedorder(ml,ncells)
-                        savefigure && imsave_data(dataset,fprefix3,W3[:,neworder],H3[neworder,:],imgsz,100;
+                        savefigure && imsave_data(dataset,fprefix4,W3[:,neworder],H3[neworder,:],imgsz,100;
                             mssdwstr="_MSE"*@sprintf("%1.4f",mssd), mssdhstr="_MSE"*@sprintf("%1.4f",mssdH), saveH=true)
                         push!(mssds,mssd); push!(mssdHs, mssdH)
                     elseif dataset ∈ [:urban, :cbclface, :orlface]
                         # Xrecon = W3*H3[:,100]; @show Xrecon[1:10]
-                        savefigure && imsave_reconstruct(fprefix3,X,W3,H3,imgsz; index=100)
+                        savefigure && imsave_reconstruct(fprefix4,X,W3,H3,imgsz; index=100)
                     end
                 end
             end
@@ -170,7 +188,7 @@ for dataset in datasets
             rt1 = @elapsed Wcd, Hcd = NMF.nndsvd(X, ncells, variant=:ar)
             fprefix0 = "CDinit$(initdatastr)_normalize_rt"*@sprintf("%1.2f",rt1)
             Wcd0 = copy(Wcd); Hcd0 = copy(Hcd)
-            W1,H1 = copy(Wcd), copy(Hcd); normalizeWH!(W1,H1)
+            W1,H1 = copy(Wcd), copy(Hcd); normalizeW!(W1,H1)
             savefigure && imsave_data(dataset,fprefix0,W1,H1,imgsz,lengthT; saveH=false)
             fprefix1 = "CD$(initdatastr)_normalize"
             push!(rt1s,rt1)
@@ -199,7 +217,7 @@ for dataset in datasets
                     x_abss, xw_abss, xh_abss, f_xs, f_rel, semisympen, regW, regH = getdata(trs)
                     savefigure && plot_convergence(fprefix3,x_abss,xw_abss,xh_abss,f_xs; title="convergence (CD)")
                 end
-                normalizeWH!(Wcd,Hcd); Wcd1,Hcd1 = sortWHslices(Wcd,Hcd)
+                normalizeW!(Wcd,Hcd); Wcd1,Hcd1 = sortWHslices(Wcd,Hcd)
                 if savefigure
                     imsave_data(dataset,fprefix3,Wcd1,Hcd1,imgsz,100; saveH=true)
                     plotH_data(dataset,fprefix3,Hcd1)
@@ -365,7 +383,7 @@ for ncells in ncellsrng
     Mw, Mh = copy(Mwinit), copy(Mhinit)
     rt2 = @elapsed W1, H1, objvals, trs = scasolve!(W0, H0, Mw, Mh; stparams=stparams, lsparams=lsparams, cparams=cparams);
     W2,H2 = copy(W1), copy(H1)
-    normalizeWH!(W2,H2); imshowW(W2,imgsz, borderwidth=1)
+    normalizeW!(W2,H2); imshowW(W2,imgsz, borderwidth=1)
     mssdssca, ml, ssds = matchedfiterr(gtW,W2);
     push!(rtssca1s, rt1); push!(rtssca2s, rt2); push!(mssdsscas,mssdssca)
     imsaveW("SSCA_SNR$(SNR)_n$(ncells)_mssd$(mssdssca)_rt1$(rt1)_rt2$(rt2).png",W2,imgsz,borderwidth=1)
@@ -375,14 +393,14 @@ for ncells in ncellsrng
     Mw, Mh = copy(Mwinit), copy(Mhinit)
     rt2 = @elapsed W1, H1, objvals, trs = scasolve!(W0, H0, Mw, Mh; stparams=stparams, lsparams=lsparams, cparams=cparams);
     W2,H2 = copy(W1), copy(H1)
-    normalizeWH!(W2,H2); imshowW(W2,imgsz, borderwidth=1)
+    normalizeW!(W2,H2); imshowW(W2,imgsz, borderwidth=1)
     mssdssca, ml, ssds = matchedfiterr(gtW,W2);
     push!(rtssca2s0p1, rt2); push!(mssdsscas0p1,mssdssca)
     imsaveW("SSCA_SNR$(SNR)_n$(ncells)_β$(stparams.β1)_mssd$(mssdssca)_rt1$(rt1)_rt2$(rt2).png",W2,imgsz,borderwidth=1)
     # @show "SSCA+Rect"
     # W2,H2 = copy(W1), copy(H1)
     # W2[W2.<0].=0; H2[H2.<0].=0;
-    # normalizeWH!(W2,H2); # imshowW(W2,imgsz, borderwidth=1)
+    # normalizeW!(W2,H2); # imshowW(W2,imgsz, borderwidth=1)
     # mssdsscarect, ml, ssds = matchedfiterr(gtW,W2);
     # push!(mssdsscarects,mssdsscarect)
     # imsaveW("SSCA_rect_SNR$(SNR)_n$(ncells)_mssd$(mssdsscarect)_rt1$(rt1)_rt2$(rt2).png",W2,imgsz,borderwidth=1)
@@ -390,7 +408,7 @@ for ncells in ncellsrng
     # @show "SSCA+CD"
     # W2,H2 = copy(W1), copy(H1)
     # rtsscacd2 = @elapsed NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=1000, α=0.1, l₁ratio=0.5), X, W2, H2)
-    # normalizeWH!(W2,H2); # imshowW(W2,imgsz, borderwidth=1)
+    # normalizeW!(W2,H2); # imshowW(W2,imgsz, borderwidth=1)
     # mssdsscacd, ml, ssds = matchedfiterr(gtW,W2);
     # push!(rtsscacd2s, rtsscacd2); ; push!(mssdsscacds,mssdsscacd)
     # imsaveW("SSCA_CD_SNR$(SNR)_n$(ncells)_mssd$(mssdsscacd)_rt1$(rt1)_rt2$(rt2)_rt3$(rtsscacd2).png",W2,imgsz,borderwidth=1)
@@ -400,7 +418,7 @@ for ncells in ncellsrng
     rtcd1 = @elapsed Wcd, Hcd = NMF.nndsvd(X, ncells)
     Wcd0, Hcd0 = copy(Wcd), copy(Hcd)
     rtcd2 = @elapsed NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=1000, α=α, l₁ratio=0.5), X, Wcd, Hcd)
-    normalizeWH!(Wcd,Hcd); imshowW(Wcd,imgsz, borderwidth=1)
+    normalizeW!(Wcd,Hcd); imshowW(Wcd,imgsz, borderwidth=1)
     mssdcd, mlcd, ssdcd = matchedfiterr(gtW,Wcd)
     push!(rtcd1s, rtcd1); push!(rtcd2s, rtcd2); push!(mssdcds,mssdcd)
     imsaveW("cd_SNR$(SNR)_n$(ncells)_a$(α)_mssd$(mssdcd)_rt1$(rtcd1)_rt2$(rtcd2).png",Wcd,imgsz)
@@ -409,7 +427,7 @@ for ncells in ncellsrng
     α = 3
     Wcd, Hcd = copy(Wcd0), copy(Hcd0)
     rtcd20p1 = @elapsed NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=1000, α=α, l₁ratio=0.5), X, Wcd, Hcd)
-    normalizeWH!(Wcd,Hcd); imshowW(Wcd,imgsz, borderwidth=1)
+    normalizeW!(Wcd,Hcd); imshowW(Wcd,imgsz, borderwidth=1)
     mssdcd0p1, mlcd, ssdcd = matchedfiterr(gtW,Wcd)
     push!(rtcd2s0p1, rtcd20p1); push!(mssdcds0p1,mssdcd0p1)
     imsaveW("cd_SNR$(SNR)_n$(ncells)_a$(α)_mssd$(mssdcd)_rt1$(rtcd1)_rt2$(rtcd2).png",Wcd,imgsz)
@@ -500,7 +518,7 @@ for factor in factorrng
     rt1 = @elapsed W0, H0, Mw, Mh = initsemisca(X, ncells)
     rt2 = @elapsed W1, H1, objval, trs = scasolve!(W0, H0, Mw, Mh; stparams=stparams, cparams=cparams);
     W2,H2 = copy(W1), copy(H1)
-    normalizeWH!(W2,H2); # imshowW(W2,imgsz, borderwidth=1)
+    normalizeW!(W2,H2); # imshowW(W2,imgsz, borderwidth=1)
     mssdssca, ml, ssds = matchedfiterr(gtW,W2);
     push!(rtssca1s, rt1); push!(rtssca2s, rt2); push!(mssdsscas,mssdssca)
     imsaveW("W2_SNR$(SNR)_f$(factor)_mssd$(mssdssca)_rt1$(rt1)_rt2$(rt2).png",W2,imgsz,borderwidth=1)
@@ -512,7 +530,7 @@ for factor in factorrng
     Wcd0, Hcd0 = copy(Wcd),copy(Hcd)
     α = 0.0
     rtcd20 = @elapsed NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=1000, α=α, l₁ratio=0.5), X, Wcd, Hcd)
-    normalizeWH!(Wcd,Hcd)
+    normalizeW!(Wcd,Hcd)
     mssdcd0, mlcd, ssdcd = matchedfiterr(gtW,Wcd)
     push!(rtcd2s0, rtcd20); push!(mssdcds0,mssdcd0)
     imsaveW("cd_SNR$(SNR)_f$(factor)_a$(α)_mssd$(mssdcd0)_rt1$(rtcd1)_rt2$(rtcd20).png",Wcd,imgsz)
@@ -521,7 +539,7 @@ for factor in factorrng
     Wcd, Hcd = copy(Wcd0),copy(Hcd0)
     α = 0.1
     rtcd20p1 = @elapsed NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=1000, α=α, l₁ratio=0.5), X, Wcd, Hcd)
-    normalizeWH!(Wcd,Hcd)
+    normalizeW!(Wcd,Hcd)
     mssdcd0p1, mlcd, ssdcd = matchedfiterr(gtW,Wcd)
     push!(rtcd2s0p1, rtcd20p1); push!(mssdcds0p1,mssdcd0p1)
     imsaveW("cd_SNR$(SNR)_f$(factor)_a$(α)_mssd$(mssdcd0p1)_rt1$(rtcd1)_rt2$(rtcd20p1).png",Wcd,imgsz)
@@ -597,3 +615,380 @@ ylabel("Error",fontsize = 12)
 savefig("noc_vs_errors.png")
 
 =#
+
+# :fastoca
+if false
+    dataset = :fakecell; SNR = 60; ncells = 15
+    ls_method = :none; initmethod = :svd; initfn = SCA.nndsvd2; initpwradj = :balance
+    method = :oca; sd_group = :whole; optimmethod = :optim_lbfgs; objective = :normal; regularization = :W1
+    order = 1; usingRelaxedL1=true; λ1 = 0; β1 = 1; approxHo = false; maxiter = 100; innermaxiter = 100; tol=1e-7
+    show_trace=true; store_trace=true; savefigure = true
+    makepositive = false
+
+    X, imgsz, lengthT, ncells0, gtncells, datadic = load_data(dataset; SNR=SNR, save_gtimg=(false&&savefigure));
+    rt1 = @elapsed W0, H0, Mw0, Mh0, Wp, Hp, d = initsemisca(X, ncells, poweradjust=initpwradj,
+                initmethod=initmethod, initfn=initfn);
+
+    σ0 = 00*round(std(W0)^2,digits=5); r=0.1
+
+    rt2 = @elapsed if method == :oca
+        Mw, Mh = copy(Mw0), copy(Mh0) # reload initialized Mw, Mh
+        # minOrthogMw!
+        Mw, Mh, d, f_xs, x_abss, iter, trs = minOrthogMw!(W0,Mw,d,λ1,β1,σ0,r,order,maxiter,innermaxiter,tol;
+                            approxHo=approxHo, usingRelaxedL1=usingRelaxedL1, optimmethod=optimmethod, sd_group=sd_group,
+                            show_trace=show_trace, store_trace=store_trace, show_plot=true, plotiterrng=1:0,
+                            plotinneriterrng=1:1);
+        W2,H2 = copy(W0*Mw), copy(Mh*H0)
+    elseif method == :fastoca
+        Mw, Mh = copy(Mw0), copy(Mh0) # reload initialized Mw, Mh
+        # ocasolve!
+        sd_group = :column
+        stparams = StepParams(β1=β1, β2=0, λ1=λ1, λ2=0, reg=regularization, order=order, method=:whole_uc,
+                objective=objective)
+        lsparams = LineSearchParams(method=:sca_full, c=0.5, α0=1.0, ρ=0.5, maxiter=100, show_lsplot=true,
+                iterations_to_show=[1,2,3,4,5])
+        cparams = ConvergenceParams(allow_f_increases = true, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
+                x_abstol=tol, successive_f_converge=2, maxiter=maxiter, store_trace=store_trace, show_trace=show_trace)
+        W2, objvals, trs = ocasolve!(W0, Mw, d; stparams=stparams, lsparams=lsparams, cparams=cparams);
+            x_abss, xw_abss, xh_abss, f_xs, f_rel, orthogpen, regW, regH = getdata(trs)
+        iter = length(trs)
+        H2 = W2\X
+    end
+
+    # save images
+    normalizeW!(W2,H2); W3,H3 = sortWHslices(W2,H2)
+    makepositive && flip2makepos!(W3,H3)
+    Hostr = optimmethod == :optim_newton ? (approxHo ? "_approxHo" : "_exactHo") :
+                            (optimmethod == :optim_lbfgs ? "_lbfgs" : "")
+    imsave_data(dataset,"$(method)$(Hostr)_b$(β1)_s$(σ0)_r$(r)_$(SNR)dB_it$(iter)_rt$(rt2)",W3,H3,imgsz,100; saveH=true)
+    plot_convergence("$(method)$(Hostr)_b$(β1)_s$(σ0)_r$(r)_$(SNR)dB_it$(iter)_rt$(rt2)",x_abss,f_xs; title="convergence (SCA)")
+    plotH_data(dataset,"$(method)$(Hostr)_b$(β1)_s$(σ0)_r$(r)_$(SNR)dB_it$(iter)_rt$(rt2)",H3)
+
+end
+
+# plot search direction
+β1 = 1; σ0 = 100*round(std(W0)^2,digits=5); r=0.1
+β = β1/norm(W0,1); λ = λ1/norm(W0)^2; Y = Diagonal(d)
+
+Mw, Mh = copy(Mw0), copy(Mh0) # reload initialized Mw, Mh
+rt2 = @elapsed Mwlbfgs, Mh, d, f_xs, x_abss, iter, trs = minOrthogMw!(W0,Mw,d,λ1,β1,σ0,r,order,maxiter,innermaxiter,tol;
+                    approxHo=false, usingRelaxedL1=true, optimmethod=:optim_lbfgs, sd_group=sd_group,
+                    show_trace=show_trace, store_trace=false, show_plot=false, plotiterrng=1:0,
+                    plotinneriterrng=1:1);
+W2,H2 = copy(W0*Mw), copy(Mh*H0); normalizeW!(W2,H2); W3,H3 = sortWHslices(W2,H2)
+imsave_data(dataset,"oca_lbfgs_b$(β1)_$(SNR)dB_it$(iter)_rt$(rt2)",W3,H3,imgsz,100; saveH=false)
+
+Mw, Mh = copy(Mw0), copy(Mh0) # reload initialized Mw, Mh
+rt2 = @elapsed Mwnewton, Mh, d, f_xs, x_abss, iter, trs = minOrthogMw!(W0,Mw,d,λ1,β1,σ0,r,order,maxiter,innermaxiter,tol;
+                    approxHo=false, usingRelaxedL1=true, optimmethod=:optim_newton, sd_group=sd_group,
+                    show_trace=show_trace, store_trace=false, show_plot=false, plotiterrng=1:0,
+                    plotinneriterrng=1:1);
+W2,H2 = copy(W0*Mw), copy(Mh*H0); normalizeW!(W2,H2); W3,H3 = sortWHslices(W2,H2)
+imsave_data(dataset,"oca_exact_b$(β1)_$(SNR)dB_it$(iter)_rt$(rt2)",W3,H3,imgsz,100; saveH=false)
+
+Mw, Mh = copy(Mw0), copy(Mh0) # reload initialized Mw, Mh
+rt2 = @elapsed Mwnewtonaprx, Mh, d, f_xs, x_abss, iter, trs = minOrthogMw!(W0,Mw,d,λ1,β1,σ0,r,order,maxiter,innermaxiter,tol;
+                    approxHo=true, usingRelaxedL1=true, optimmethod=:optim_newton, sd_group=sd_group,
+                    show_trace=show_trace, store_trace=false, show_plot=false, plotiterrng=1:0,
+                    plotinneriterrng=1:1);
+W2,H2 = copy(W0*Mw), copy(Mh*H0); normalizeW!(W2,H2); W3,H3 = sortWHslices(W2,H2)
+imsave_data(dataset,"oca_aprox_b$(β1)_$(SNR)dB_it$(iter)_rt$(rt2)",W3,H3,imgsz,100; saveH=false)
+
+steplbfgs = Mwlbfgs - Mw0; nstlbfgs = round(norm(steplbfgs),digits=3)
+penlbfgs(α) = (αM = Mw0 + α*steplbfgs; SCA.penaltyMw(αM,W0,Y,λ,β,false,order))
+
+stepnewton = Mwnewton - Mw0; nstnewton = round(norm(stepnewton),digits=3)
+pennewton(α) = (αM = Mw0 + α*stepnewton; SCA.penaltyMw(αM,W0,Y,λ,β,false,order))
+
+stepnewtonaprx = Mwnewtonaprx - Mw0; nstnewtonaprx = round(norm(stepnewtonaprx),digits=3)
+pennewtonaprx(α) = (αM = Mw0 + α*stepnewtonaprx; SCA.penaltyMw(αM,W0,Y,λ,β,false,order))
+
+αrng = -0.5:0.001:1.5
+plot(αrng,[penlbfgs.(αrng) pennewton.(αrng) pennewtonaprx.(αrng)])
+legend(["LBFGS ∥step∥=$(nstlbfgs)","Newton(exact) ∥step∥=$(nstnewton)","Newton(approximated) ∥step∥=$(nstnewtonaprx)"])
+savefig("$(method)_penplot_b$(β1)_$(SNR)_rng$(αrng)dB.png")
+close("all")
+αrng = 0.75:0.00001:1.25
+plot(αrng,[penlbfgs.(αrng) pennewton.(αrng) pennewtonaprx.(αrng)])
+legend(["LBFGS ∥step∥=$(nstlbfgs)","Newton(exact) ∥step∥=$(nstnewton)","Newton(approximated) ∥step∥=$(nstnewtonaprx)"])
+savefig("$(method)_penplot_b$(β1)_$(SNR)_rng$(αrng)dB.png")
+close("all")
+
+# use QP for rectification
+if false
+    dataset = :fakecell; SNR = 60; ncells = 15
+    ls_method = :sca_full; initmethod = :svd; initfn = SCA.nndsvd2; initpwradj = :balance
+    method = :oca; sd_group = :whole; optimmethod = :convex; objective = :normal; regularization = :W1
+    order = 1; λ1 = 0; β1 = 1; approxHo = true; maxiter = 50; tol=-1
+    show_trace=true; store_trace=true; savefigure = true
+    makepositive = false
+
+    X, imgsz, lengthT, ncells0, gtncells, datadic = load_data(dataset; SNR=SNR, save_gtimg=(false&&savefigure));
+    rt1 = @elapsed W0, H0, Mw0, Mh0, Wp, Hp, d = initsemisca(X, ncells, poweradjust=initpwradj,
+                initmethod=initmethod, initfn=initfn);
+
+    Mw, Mh = copy(Mw0), copy(Mh0) # reload initialized Mw, Mh
+    # ocasolve!
+    sd_group = :column
+    stparams = StepParams(β1=β1, β2=0, λ1=λ1, λ2=0, reg=regularization, order=order, method=:whole_uc,
+            objective=objective)
+    lsparams = LineSearchParams(method=:sca_full, c=0.5, α0=1.0, ρ=0.5, maxiter=100, show_lsplot=true,
+            iterations_to_show=[1,2,3,4,5])
+    cparams = ConvergenceParams(allow_f_increases = true, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
+            x_abstol=tol, successive_f_converge=2, maxiter=maxiter, store_trace=store_trace, show_trace=show_trace)
+    W2, objvals, trs = ocasolve!(W0, Mw, d; stparams=stparams, lsparams=lsparams, cparams=cparams);
+        x_abss, xw_abss, xh_abss, f_xs, f_rel, orthogpen, regW, regH = getdata(trs)
+    iter = length(trs)
+    H2 = W2\X
+end
+
+if false
+    m,n,p = (5,10,4)
+    F = rand(m,p)
+    G = rand(p,n)
+    M = rand(p,p)
+    x = vec(M)
+
+    function FM2A!(F,A)
+        m,p = size(F)
+        for i in 0:p-1
+            rrng = m*i+1:m*i+m
+            crng = p*i+1:p*i+p
+            A[rrng,crng] .= F
+        end
+        A
+    end
+
+    function MG2A!(G,A)
+    p,n = size(G)
+        for i in 0:p-1
+            rrng = i+1:p:n*p
+            crng = i+1:p:p*p
+            A[rrng,crng] .= G'
+        end
+        A
+    end
+
+    function MtG2A!(G,A)
+        p,n = size(G)
+        for i in 0:p-1
+            rrng = i+1:p:n*p
+            crng = p*i+1:p*i+p
+            A[rrng,crng] .= G'
+        end
+        A
+    end
+
+    function FMG2A!(F,G,A)
+        m,p = size(F); p,n = size(G)
+        for i in 0:n-1, j in 0:p-1
+            rrng = m*i+1:m*i+m
+            crng = p*j+1:p*j+p
+            A[rrng,crng] .= G[j+1,i+1]*F
+        end
+        A
+    end
+
+    A = zeros(m*p,p^2) # must be zero matrix
+    norm(F*M) == norm(FM2A!(F,A)*x)
+
+    A = zeros(n*p,p^2) # must be zero matrix
+    norm(M*G) == norm(MG2A!(G,A)*x)
+
+    A = zeros(n*p,p^2) # must be zero matrix
+    norm(M'*G) == norm(MtG2A!(G,A)*x)
+
+    A = zeros(m*n,p^2) # must be zero matrix
+    norm(F*M*G) == norm(FMG2A!(F,G,A)*x)
+
+    #=========== whole gradient and Hessian test =================#
+    using ForwardDiff, Calculus, BenchmarkTools
+    p=15; Mw=rand(p,p); Mh=rand(p,p); D=Diagonal(ones(p))
+
+    # Invertivility
+    Ei(Mw,Mh,D) = norm(Mw*Mh-D)^2
+    Ei(x) = (dMw = reshape(x[1:p^2],p,p); dMh = reshape(x[p^2+1:2*p^2],p,p); Ei(Mw*(I+dMw),Mh*(I+dMh),D))
+    function gradEi(x,Mw,Mh,D)
+        p2 = length(x); p = Int(sqrt(p2/2))
+        xw = x[1:p^2]; xh = x[p^2+1:2*p^2]
+        dMw = reshape(xw,p,p); dMh = reshape(xh,p,p)
+        MwMh = Mw*Mh
+        Aw = zeros(p^2,p^2); Ah = zeros(p^2,p^2)
+        e0h = vec(MwMh*(I+dMh)-D); e0w = vec(MwMh-D+Mw*dMw*Mh)
+        FMB2A!(Mw,Mh*(I+dMh),Aw); FM2A!(Mw*(I+dMw)*Mh,Ah)
+        HessEw = 2*Aw'Aw; HessEh = 2*Ah'Ah
+        gradEw = HessEw*xw+2*Aw'e0h; gradEh = HessEh*xh+2*Ah'e0w
+        vcat(gradEw,gradEh)
+    end
+
+    function cal_AfTAf!(AfTAf, AfTb, F, B)
+        m, p = size(F)
+        FTF = F'F; AfTb .= vec(F'B)
+        for j = 1:p
+            offset = (j-1)*p
+            rrng = offset+1:offset+p
+            crng = offset+1:offset+p
+            AfTAf[rrng,crng] .= FTF
+        end
+    end
+
+    function cal_AfgTAfg!(AfgTAfg, AfgTb, F, G, B)
+        m, p = size(F)
+        FTF = F'F; GGT = G*G'; AfgTb .= vec(F'*B*G')
+        for i = 1:p, j = 1:p
+            offset_i = (i-1)*p
+            offset_j = (j-1)*p
+            rrng = offset_i+1:offset_i+p
+            crng = offset_j+1:offset_j+p
+            AfgTAfg[rrng,crng] .= GGT[i,j]*FTF
+        end
+    end
+
+    function gradEifast(x,Mw,Mh,D)
+        p2 = length(x); p = Int(sqrt(p2/2))
+        xw = x[1:p^2]; xh = x[p^2+1:2*p^2]
+        dMw = reshape(xw,p,p); dMh = reshape(xh,p,p)
+        MwMh = Mw*Mh
+        Ew0 = MwMh*(I+dMh)-D; Eh0 = MwMh-D+Mw*dMw*Mh
+        AwTAw = zeros(p^2,p^2); AhTAh = zeros(p^2,p^2)
+        AwTbw = zeros(p^2); AhTbh = zeros(p^2)
+        cal_AfgTAfg!(AwTAw, AwTbw, Mw, Mh*(I+dMh), Ew0)
+        cal_AfTAf!(AhTAh, AhTbh, Mw*(I+dMw)*Mh, Eh0)
+        HessEw = 2*AwTAw; HessEh = 2*AhTAh
+        gradEw = HessEw*xw+2*AwTbw; gradEh = HessEh*xh+2*AhTbh
+        vcat(gradEw,gradEh)
+    end
+
+    x0 = zeros(2*p^2)
+    fdgEi = ForwardDiff.gradient(Ei,x0)
+    @time gEi = gradEi(x0,Mw,Mh,D)
+    @time gEifast = gradEifast(x0,Mw,Mh,D)
+    @show norm(fdgEi) == norm(gEi), norm(fdgEi), norm(gEi)
+    @show norm(fdgEi) == norm(gEifast), norm(fdgEi), norm(gEifast)
+
+    # Orthogonality
+    Eo(Mw,D) = norm(Mw'Mw-D)^2
+    Eo(x) = (dMw = reshape(x,p,p); Eo(Mw*(I+dMw),D))
+    function gradHessEo(x,Mw,D)
+        p2 = length(x); p = Int(sqrt(p2))
+        dMw = reshape(x,p,p)
+        Af = zeros(p^2,p^2); Ab = zeros(p^2,p^2)
+        T = Mw'Mw; e0 = vec(T-D)
+        FM2A!(T,Af); MtG2A!(T,Ab); Af .+= Ab
+        HessEw = 2*Af'Af; gradEw = HessEw*x+2*Af'e0
+        gradEw, HessEw
+    end
+    x0 = zeros(p^2)
+    fdgEo = ForwardDiff.gradient(Eo,x0)
+    fdhEo = ForwardDiff.hessian(Eo,x0)
+    gEo, hEo = gradHessEo(x0,Mw,D)
+    @show norm(fdgEo) ≈ norm(gEo), norm(fdgEo), norm(gEo)
+    @show norm(fdhEo) ≈ norm(hEo), norm(fdhEo), norm(hEo) # because this hEo is the second order approximation
+
+    cal_Ax(T::AbstractArray, x::Vector) =
+        (p=size(W,2); dM=reshape(x,p,p); vec(T'*dM+dM'T))
+    cal_Atb(T::AbstractArray, b::Vector) =
+        (p=size(W,2); B=reshape(x,p,p); vec(T'*B+T*B'))
+    function gradEofast(x,Mw,D)
+        p2 = length(x); p = Int(sqrt(p2))
+        dMw = reshape(x,p,p)
+        T = Mw'Mw; b = vec(T-D)
+        Ax = vec(T*dM+dM'T); AtAx = cal_Atb(T,Ax)
+        Atb = cal_Atb(T,b)
+        2(AtAx+Atb)
+    end
+
+    gEo, hEo = gradHessEo(x0,Mw,D)
+    @show norm(fdgEo) ≈ norm(gEo), norm(fdgEo), norm(gEo)
+
+    # Sparseness
+    W = rand(800,p).-0.5; x0 = rand(p^2)
+    Es(x) = (dM=reshape(x,p,p); norm(W*(I+dM),1)) # W1
+    Es2(x) = (dM=reshape(x,p,p); A=zeros(800*p,p^2); FM2A!(W,A); b=vec(W); sign.(b)'*(b+A*x))
+    fdgEs = ForwardDiff.gradient(Es,x0)
+    fdgEs2 = ForwardDiff.gradient(Es2,x0)
+    clgEs = Calculus.gradient(Es,x0)
+
+    gradEs(x,W) = (dM=reshape(x,p,p); vec(W'sign.(W)))
+    gradEs2(x,W) = (dM=reshape(x,p,p); b=vec(W); sb = sign.(b); A=zeros(800*p,p^2); FM2A!(W,A); A'sb)
+    gEs = gradEs(x0,W)
+    gEs2 = gradEs2(x0,W)
+    @show norm(fdgEs) ≈ norm(gEs), norm(fdgEs), norm(gEs)
+
+    using LinearAlgebra
+
+    function cal_diagAtA(x,Mw)
+        grad, hess = gradHessEo(x,Mw,D)
+        diag(hess)./2
+    end
+
+    function cal_diagAtA_fast(x,Mw)
+        MtM = Mw'Mw
+        diagA = zeros(p^2)
+        for j = 1:p
+            offset = (j-1)*p
+            for k = 1:p
+                diagA[offset+k] = 2(norm(MtM[k,:])^2+MtM[j,k]^2)
+            end
+        end
+        diagA
+    end
+
+    p=15
+    Mw = rand(p,p)
+    diagA = cal_diagAtA(x,Mw)
+    diagAfast = cal_diagAtA_fast(x,Mw)
+    diagA ≈ diagAfast
+
+    p = size(Mw,1)
+    Eo(Mw,D) = norm(Mw'Mw-D)^2
+    Eo(x) = (dMw = reshape(x,p,p); Eo(Mw*(I+dMw),D))
+    Es(W0,Mw) = norm(W0*Mw,1)
+    Es(x) = (dM = reshape(x,p,p); Es(W0*Mw,(I+dM)))
+    Enn(x) = (dM = reshape(x,p,p); sca2(W0*Mw*(I+dM)))
+    W = W0*Mw; β = stparams.reg == :W1 ? stparams.β1/norm(W0,1) : 0
+    fg!, _ = SCA.prepare_fg_orthog_whole(W, Mw, D; useprecond=stparams.useprecond, β=β, λ=λ, reg=stparams.reg)
+    fgapp!, _ = SCA.prepare_fg_orthog_whole_approx(W, Mw, D; useprecond=stparams.useprecond, β=β, λ=λ, reg=stparams.reg)
+
+    x0 = rand(p^2)
+    G = zeros(p^2); fg!(nothing,G,x0)
+    f = fg!(1,nothing,x0)
+    fo = Eo(x0); fs = Es(x0); fnn = Enn(x0)
+    truef = fo + β*fs + λ*fnn
+    f ≈ truef
+
+    Gapp = zeros(p^2); fgapp!(nothing,Gapp,x0)
+    fapp = fgapp!(1,nothing,x0)
+    fapp ≈ f
+    G ≈ Gapp
+    norm(f-fapp)
+    norm(G-Gapp)
+
+    fdgo = ForwardDiff.gradient(Eo,x0)
+    fdgs = ForwardDiff.gradient(Es2,x0)
+    fdgnn = ForwardDiff.gradient(Enn,x0)
+    fdg = fdgo + β*fdgs + λ*fdgnn
+    G ≈ fdg
+
+    p = size(Mw,1)
+    D = Matrix(1.0I,p,p)
+
+    # Mw = M
+    Es(W0,Mw) = norm(W0*Mw,1)
+    Es(x) = (M = reshape(x,p,p); Es(W0,M))
+    x0 = rand(p^2); M = reshape(x0,p,p); W=W0*M
+    gs1 = vec(W0'sign.(W))
+    fdgs = ForwardDiff.gradient(Es,x0)
+    clgs = Calculus.gradient(Es,x0)
+    gs1 ≈ fdgs
+
+    # Mw = Mw0(I+dM)
+    Es(W0,Mw) = norm(W0*Mw,1)
+    Es(x) = (dM = reshape(x,p,p); Es(W0*Mw,I+dM))
+    x0 = zeros(p^2); dM = reshape(x0,p,p); W=W0*Mw
+    gs1 = vec(W'sign.(W))
+    fdgs = ForwardDiff.gradient(Es,x0)
+    clgs = Calculus.gradient(Es,x0)
+    gs1 ≈ fdgs
+
+end
