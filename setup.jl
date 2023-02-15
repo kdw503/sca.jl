@@ -2,7 +2,7 @@ Pkg.activate(".")
 
 #using MultivariateStats # for ICA
 using Images, Convex, SCS, LinearAlgebra, Printf, Colors
-using FakeCells, AxisArrays, ImageCore, MappedArrays, NMF
+using FakeCells, AxisArrays, ImageCore, MappedArrays, NMF, Statistics
 using ImageAxes # avoid using ImageCore.nimages for AxisArray type array
 using SymmetricComponentAnalysis
 SCA = SymmetricComponentAnalysis
