@@ -1,5 +1,0 @@
-#!/bin/bash
-
-# julia         file                         SNRs iter L Wonly sd_grp lambda betas
-# cbyc, L2, Wonly
-julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:cbclface] [20] 100 [0] [0.5,0.1] :cd [15] false

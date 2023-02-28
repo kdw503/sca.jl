@@ -1,12 +1,12 @@
 using MAT
 
 function load_cbcl()
-    filepath = joinpath(datapath,"MIT-CBCL-face","face.train","train","face")
+    dirpath = joinpath(datapath,"MIT-CBCL-face","face.train","train","face")
     nRow = 19; nCol = 19; nFace = 2429; imgsz = (nRow, nCol)
     X = zeros(nRow*nCol,nFace)
     for i in 1:nFace
         fname = "face"*@sprintf("%05d",i)*".pgm"
-        img = load(joinpath(filepath,fname))
+        img = load(joinpath(dirpath,fname))
         X[:,i] = vec(img)
     end
     ncells = 49
@@ -32,8 +32,8 @@ end
 
 # :natural : 12X12, lengthT=100000, ncomponents = 72
 function load_natural(;num_trials=1000, batch_size=100, sz=12, BUFF=4) # BUFF(border margin)
-    frn = "IMAGES.mat"
-    dd = matread(frn); img = dd["IMAGES"]
+    dirpath = joinpath(datapath,"natural")
+    dd = matread(joinpath(dirpath,"IMAGES.mat")); img = dd["IMAGES"]
     
     lengthT = num_trials*batch_size
     imgsz = (sz, sz); l=sz^2
@@ -57,9 +57,9 @@ end
 
 # :natural : 12X12, lengthT=100000, ncomponents = 72
 function load_onoffnatural(;num_trials=1000, batch_size=100, sz=12, BUFF=4) # BUFF(border margin)
-    frn = "IMAGES.mat"
-    dd = matread(frn); img = dd["IMAGES"]
-    
+    dirpath = joinpath(datapath,"natural")
+    dd = matread(joinpath(dirpath,"IMAGES.mat")); img = dd["IMAGES"]
+
     lengthT = num_trials*batch_size
     imgsz = (sz, sz); l=sz^2
     num_images=size(img,3); image_size=512
@@ -84,8 +84,8 @@ end
 
 function load_neurofinder()
     roi = (71:170, 31:130)
-    dataname = "neurofinder.02.00.cut100250_sqrt"
-    fullorgimg = load(dataname*".tif")
+    dirpath = joinpath(datapath,"neurofinder")
+    fullorgimg = load(joinpath(dirpath,"neurofinder.02.00.cut100250_sqrt.tif"))
     orgimg = fullorgimg[roi...,:]
     # save("neurofinder.02.00.cut.gif",orgimg.*2)
     imgsz = size(orgimg)[1:end-1]; lengthT = size(orgimg)[end]
@@ -95,8 +95,8 @@ function load_neurofinder()
 end
 
 function load_urban()
-    filepath = joinpath(datapath,"Hyperspectral-Urban")
-    vars = matread(joinpath(filepath,"Urban_R162.mat"))
+    dirpath = joinpath(datapath,"Hyperspectral-Urban")
+    vars = matread(joinpath(dirpath,"Urban_R162.mat"))
     Y=vars["Y"]; nRow = Int(vars["nRow"]); nCol = Int(vars["nCol"]); nBand = 162; imgsz = (nRow, nCol)
     maxvalue = maximum(Y)
     X = Array(Y')./maxvalue;  # reinterpret(N0f8,UInt8(255))=1.0N0f8 but vars["Y"] has maximum 1000
@@ -105,22 +105,31 @@ function load_urban()
     X, imgsz, nBand, ncells, gtncells, Dict()
 end
 
-function load_fakecell(;SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, jitter=0, only2cells=false, save_gtimg=false)
-    fprefix = "fakecells_sz$(imgsz)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR)"
-    X, imgsz, fakecells_dic, img_nl, maxSNR_X = loadfakecell(Float64, fprefix*".jld", only2cells=only2cells,
-            fovsz=imgsz, imgsz=imgsz, lengthT=lengthT, jitter=jitter, SNR=SNR, save=true);
+function load_fakecells(;SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, useCalciumT=false, jitter=0,
+        only2cells=false, save_maxSNR_X=false, save_gtimg=false)
+    dirpath = joinpath(datapath,"fakecells")
+    calciumstr = useCalciumT ? "_calcium" : ""
+    fprefix = "fakecells$(calciumstr)_sz$(imgsz)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR)"
+    dfprefix = joinpath(dirpath,fprefix)
+    @show useCalciumT
+    X, imgsz, fakecells_dic, img_nl, maxSNR_X = loadfakecell(Float64, dfprefix*".jld", only2cells=only2cells,
+        fovsz=imgsz, imgsz=imgsz, lengthT=lengthT, useCalciumT=useCalciumT, jitter=jitter, SNR=SNR, save=true);
     gtncells = fakecells_dic["gt_ncells"]
     if save_gtimg
         gtW = fakecells_dic["gtW"]; gtH = fakecells_dic["gtH"]
         W3,H3 = copy(gtW), copy(gtH')
-        imsaveW(fprefix*"_GT_W.png", W3, imgsz, borderwidth=1)
-        imsaveH(fprefix*"_GT_H.png", H3, 100, colors=g1wm())
+        imsaveW(dfprefix*"_GT_W.png", W3, imgsz, borderwidth=1)
+        imsaveH(dfprefix*"_GT_H.png", H3, 100, colors=g1wm())
+    end
+    if save_maxSNR_X
+        imsaveW(dfprefix*"_maxSNR_W.png", maxSNR_X, imgsz, borderwidth=1,colors=bbw())
     end
     ncells = user_ncells==0 ? gtncells + 8 : user_ncells
     X, imgsz, lengthT, ncells, gtncells, fakecells_dic
 end
 
-function load_data(dataset; SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, jitter=0, save_gtimg=false)
+function load_data(dataset; SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, useCalciumT=false,
+        jitter=0, save_maxSNR_X=false, save_gtimg=false)
     if dataset == :cbclface
         println("loading CBCL face dataset")
         load_cbcl()
@@ -139,14 +148,14 @@ function load_data(dataset; SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, 
     elseif dataset == :neurofinder
         println("loading Neurofinder dataset")
         load_neurofinder()
-    elseif dataset == :fakecell
+    elseif dataset == :fakecells
         println("loading fakecells")
-        load_fakecell(only2cells=false, SNR=SNR, user_ncells=user_ncells, imgsz=imgsz, lengthT=lengthT,
-                jitter=jitter, save_gtimg=save_gtimg)
+        load_fakecells(only2cells=false, SNR=SNR, user_ncells=user_ncells, imgsz=imgsz, lengthT=lengthT,
+            useCalciumT=useCalciumT, jitter=jitter, save_maxSNR_X=save_maxSNR_X, save_gtimg=save_gtimg)
     elseif dataset == :fakecellsmall
         println("loading fakecells with only two cells")
-        load_fakecell(only2cells=true, SNR=SNR, user_ncells=6, imgsz=(20,30), lengthT=lengthT,
-                jitter=jitter, save_gtimg=save_gtimg)
+        load_fakecells(only2cells=true, SNR=SNR, user_ncells=6, imgsz=(20,30), lengthT=lengthT,
+            useCalciumT=useCalciumT,jitter=jitter, save_maxSNR_X=save_maxSNR_X, save_gtimg=save_gtimg)
     end
 end
 
@@ -171,7 +180,7 @@ function imsave_data(dataset,fprefix,W,H,imgsz,lengthT; mssdwstr="", mssdhstr=""
     elseif dataset == :neurofinder
         println("Saving image of Neurofinder dataset")
         imsave_neurofinder(fprefix,W,H,imgsz,lengthT, saveH=saveH)
-    elseif dataset == :fakecell
+    elseif dataset == :fakecells
         println("Saving image of fakecells")
         imsave_fakecell(fprefix,W,H,imgsz,lengthT; mssdwstr=mssdwstr, mssdhstr=mssdhstr, saveH=saveH)
     elseif dataset == :fakecellsmall
@@ -197,11 +206,14 @@ function interpolate(img,n)
     imginter
 end
 
-function imsave_cbcl(fprefix,W,H,imgsz,tlength; gridcols=Int(ceil(sqrt(size(W,2)))), borderwidth=1, signedcolors=g1wm())
+function imsave_cbcl(fprefix,W,H,imgsz,tlength; gridcols=Int(ceil(sqrt(size(W,2)))), borderwidth=1,
+        signedcolors=g1wm())
     # clamp_level=0.5; W3_max = maximum(abs,W3)*clamp_level; W3_clamped = clamp.(W3,0.,W3_max)
     # signedcolors = (colorant"green1", colorant"white", colorant"magenta")
-    # imsaveW(fprefix*"_iter$(iter)_rt$(rt2).png", W3, imgsz, gridcols=7, colors=signedcolors, borderval=0.5, borderwidth=1)
-    imsaveW(fprefix*"_W.png", W, imgsz; gridcols=gridcols, borderwidth=borderwidth, colors=signedcolors)
+    # imsaveW(fprefix*"_iter$(iter)_rt$(rt2).png", W3, imgsz, gridcols=7, colors=signedcolors,
+    #       borderval=0.5, borderwidth=1)
+    imsaveW(fprefix*"_W.png", W, imgsz; gridcols=gridcols, borderwidth=borderwidth,
+        colors=signedcolors)
 end
 
 function imsave_reconstruct(fprefix,X,W,H,imgsz; index=100, gridcols=7, clamp_level=1.0) # 0.2 for urban
@@ -215,22 +227,30 @@ function imsave_reconstruct(fprefix,X,W,H,imgsz; index=100, gridcols=7, clamp_le
     save(fprefix*"_recon$index.png", map(clamp01nan, reshape(W_clamped,imgsz...)))
 end
 
-function imsave_orl(fprefix,W,H,imgsz,tlength; gridcols=Int(ceil(sqrt(size(W,2)))), borderwidth=1, signedcolors=g1wm())
-    imsaveW(fprefix*"_W.png", W, imgsz; gridcols=gridcols, borderwidth=borderwidth, colors=signedcolors)
+function imsave_orl(fprefix,W,H,imgsz,tlength; gridcols=Int(ceil(sqrt(size(W,2)))),
+        borderwidth=1, signedcolors=g1wm())
+    imsaveW(fprefix*"_W.png", W, imgsz; gridcols=gridcols, borderwidth=borderwidth,
+        colors=signedcolors)
 end
 
-function imsave_natural(fprefix,W,H,imgsz,tlength; gridcols=12, borderwidth=1, signedcolors=bgw())
-    imsaveW(fprefix*"_W.png", W, imgsz; gridcols=gridcols, borderwidth=borderwidth, colors=signedcolors)
+function imsave_natural(fprefix,W,H,imgsz,tlength; gridcols=12, borderwidth=1,
+        signedcolors=bgw())
+    imsaveW(fprefix*"_W.png", W, imgsz; gridcols=gridcols, borderwidth=borderwidth,
+            colors=signedcolors)
  end
  
-function imsave_onoffnatural(fprefix,W,H,imgsz,tlength; gridcols=12, borderwidth=1, signedcolors=bgw())
-   l = imgsz[1]^2; W = W[1:l,:]-W[l+1:2*l,:]
-   imsaveW(fprefix*"_W.png", W, imgsz; gridcols=gridcols, borderwidth=borderwidth, colors=signedcolors)
+function imsave_onoffnatural(fprefix,W,H,imgsz,tlength; gridcols=12, borderwidth=1,
+        signedcolors=bgw())
+    l = imgsz[1]^2; W = W[1:l,:]-W[l+1:2*l,:]
+    imsaveW(fprefix*"_W.png", W, imgsz; gridcols=gridcols, borderwidth=borderwidth,
+            colors=signedcolors)
 end
 
-function imsave_urban(fprefix,W,H,imgsz,tlength; gridcols=2, borderwidth=5, signedcolors=bbw(), clamp_level=0.2)
+function imsave_urban(fprefix,W,H,imgsz,tlength; gridcols=2, borderwidth=5, signedcolors=bbw(),
+        clamp_level=0.2)
     W_max = maximum(abs,W)*clamp_level; W_clamped = clamp.(W,0.,W_max)
-    imsaveW(fprefix*"_W.png", W_clamped, imgsz; gridcols=gridcols, borderwidth=borderwidth, colors=signedcolors)
+    imsaveW(fprefix*"_W.png", W_clamped, imgsz; gridcols=gridcols,
+            borderwidth=borderwidth, colors=signedcolors)
 end
 
 function imsave_reconstruct_urban(fprefix,X,W,H,imgsz; index=100, clamp_level=0.2)
@@ -241,7 +261,8 @@ function imsave_reconstruct_urban(fprefix,X,W,H,imgsz; index=100, clamp_level=0.
     #save(fprefix*"_CG_clamped$index.png", map(clamp01nan, reshape(clamp.(W,0.,Inf)*clamp.(H[:,index],0.,Inf),imgsz...)))
 end
 
-function imsave_neurofinder(fprefix,W,H,imgsz,tlength; gridcols=5, borderwidth=1, signedcolors=g1wm(), saveH=true)
+function imsave_neurofinder(fprefix,W,H,imgsz,tlength; gridcols=5, borderwidth=1,
+        signedcolors=g1wm(), saveH=true)
     #@show ncells, gridcols
     ncells = size(W,2)
     for i = 1:ncells÷gridcols
@@ -258,6 +279,19 @@ function imsave_fakecell(fprefix,W,H,imgsz,tlength; mssdwstr="", mssdhstr="",
     saveH && imsaveH(fprefix*"_H$(mssdhstr).png", H, tlength; colors=signedcolors)
 end
 
+function imsave_data_gt(dataset,fprefix,W,H,gtW,gtH,imgsz,lengthT; saveH=true)
+    mssd, ml, ssds = matchednssd(gtW,W); mssdH = ssdH(ml, gtH,H')
+    neworder = zeros(Int,length(ml))
+    for (gti, i) in ml
+        neworder[gti]=i
+    end
+    for i in 1:ncells
+        i ∉ neworder && push!(neworder,i)
+    end
+    Wno, Hno = copy(W[:,neworder]), copy(H[neworder,:])
+    imsave_data(dataset,fprefix,Wno,Hno,imgsz,lengthT; mssdwstr="_MSE"*@sprintf("%1.4f",mssd),
+            mssdhstr="_MSE"*@sprintf("%1.4f",mssdH), saveH=saveH)
+end
 #=========== Plot Convergence ====================================================#
 function plot_convergence(fprefix, x_abss, xw_abss, xh_abss, f_xs; title="")
     xlbl = "iteration"; ylbl = "log10(penalty)"
@@ -274,17 +308,23 @@ function plot_convergence(fprefix, x_abss, xw_abss, xh_abss, f_xs; title="")
     ax
 end
 
-function plot_convergence(fprefix, x_abss, f_xs; title="")
+function plot_convergence(fprefix, x_abss, f_xs, f_x_abss=[]; title="")
     xlbl = "iteration"; ylbl = "log10(penalty)"
-    lstrs = ["log10(f_x)", "log10(x_abs)"]
+    lstrs = ["log10(f_x)", "log10(f_x_abs)", "log10(x_abs)"]
     logfx = log10.(f_xs); logxabs = log10.(x_abss);
     ax = plotW([logfx logxabs], fprefix*"_plot_all.png"; title=title,
             xlbl=xlbl, ylbl="", legendloc=1, arrange=:combine, legendstrs=lstrs)
             #,axis=[480,1000,-0.32,-0.28])
-    ax = plotW(logfx, fprefix*"_plot_fx.png"; title=title, xlbl=xlbl, ylbl=ylbl,
+    if length(f_x_abss) > 0
+        logfxabs = log10.(f_x_abss)
+        ax = plotW([logfx logfxabs], fprefix*"_plot_fxfxabs.png"; title=title, xlbl=xlbl, ylbl=ylbl,
+            legendstrs = [lstrs[1],lstrs[2]], legendloc=1)
+    else
+        ax = plotW(logfx, fprefix*"_plot_fx.png"; title=title, xlbl=xlbl, ylbl=ylbl,
             legendstrs = [lstrs[1]], legendloc=1)
+    end
     ax = plotW(logxabs, fprefix*"_plot_xabs.png"; title=title, xlbl=xlbl, ylbl="",
-            legendstrs = [lstrs[2]], legendloc=1)
+            legendstrs = [lstrs[3]], legendloc=1)
     ax
 end
 
@@ -300,6 +340,7 @@ end
 
 function plotH_data(fprefix,H; title="", titles=fill("",size(H,1)),
         arrange=:combine, legendloc=1)
-    plotW(H', fprefix*"_plot_H.png"; title=title, titles=titles, xlbl="", ylbl="",
-    legendloc=legendloc, arrange=arrange)
+    ax = plotW(H', fprefix*"_plot_H.png"; title=title, titles=titles, xlbl="", ylbl="",
+        legendloc=legendloc, arrange=arrange)
+    ax
 end
