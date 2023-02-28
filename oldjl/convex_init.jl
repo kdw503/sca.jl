@@ -114,7 +114,7 @@ function disp_n_save(W1, H1, W2, H2, f_xs, x_abss, iter, rt1, rt2, SNR; imgsz=(4
     save(jldfname, "f_xs", f_xs, "x_abss", x_abss, "rt1", rt1, "rt2", rt2)
 end
 
-#======== Prameters ============#
+#======== Parameters ============#
 
 #ARGS =  ["[\"face\"]","1","1","true",":column","[1000]","[10]","\"nndsvd\"","\"convex\""] # convex, ssca, hals
 #ARGS =  ["[10]","1","1","true",":column","[1000]","[10]","\"nndsvd\"","\"convex\""] # convex, ssca, hals
