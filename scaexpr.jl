@@ -312,8 +312,8 @@ for method = methods
             end
         elseif method == :OCA
             Mw, Mh = copy(Mw0), copy(Mh0)
-            stparams = StepParams(sd_group=:component, optimmethod=optimmethod, approx=approx, 
-                    β1=β1, β2=0, λ1=λ1, λ2=0, reg=regularization, order=order, 
+            stparams = StepParams(sd_group=:component, optimmethod=optimmethod, approx=approx,
+                    β1=β1, β2=0, λ1=λ1, λ2=0, reg=regularization, order=order,
                     useRelaxedL1=true, σ0=100*std(W0)^2, r=0.1, objective=objective)
             lsparams = LineSearchParams(method=ls_method, c=0.5, α0=1.0, ρ=0.5, maxiter=50, show_lsplot=true,
                     iterations_to_show=[1])
