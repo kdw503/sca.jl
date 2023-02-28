@@ -111,7 +111,6 @@ function load_fakecells(;SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, use
     calciumstr = useCalciumT ? "_calcium" : ""
     fprefix = "fakecells$(calciumstr)_sz$(imgsz)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR)"
     dfprefix = joinpath(dirpath,fprefix)
-    @show useCalciumT
     X, imgsz, fakecells_dic, img_nl, maxSNR_X = loadfakecell(Float64, dfprefix*".jld", only2cells=only2cells,
         fovsz=imgsz, imgsz=imgsz, lengthT=lengthT, useCalciumT=useCalciumT, jitter=jitter, SNR=SNR, save=true);
     gtncells = fakecells_dic["gt_ncells"]
@@ -156,6 +155,8 @@ function load_data(dataset; SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, 
         println("loading fakecells with only two cells")
         load_fakecells(only2cells=true, SNR=SNR, user_ncells=6, imgsz=(20,30), lengthT=lengthT,
             useCalciumT=useCalciumT,jitter=jitter, save_maxSNR_X=save_maxSNR_X, save_gtimg=save_gtimg)
+    else
+        error("Not supported dataset")
     end
 end
 
