@@ -177,11 +177,11 @@ datartcd = datart1cd+datart2cd
 
 
 #================== Convex.jl ==================#
-function plotP(penP1, penP2, penP3, penP4, penP5, extent, vmaxP)
+function plotP(penP1, penP2, penP3, penP4, penP5, penP6, extent, vmaxP, r12)
     # ticks = [-π, -π/2, 0, π/2, π]
     # ticklabels = ["-π", "-π/2", "0", "π/2", "π"]
 
-    fig, axs = plt.subplots(1, 6, figsize=(16, 4), gridspec_kw=Dict("width_ratios"=>[1,1,1,1,1,0.1]))
+    fig, axs = plt.subplots(1, 7, figsize=(16, 4), gridspec_kw=Dict("width_ratios"=>[1,1,1,1,1,1,0.1]))
 
     ax = axs[1]
     himg1 = ax.imshow(reverse(penP1; dims=1); extent = extent, vmin=0, vmax=vmaxP)
@@ -231,21 +231,32 @@ function plotP(penP1, penP2, penP3, penP4, penP5, extent, vmaxP)
     # ax.set_xticklabels(ticklabels)
     # ax.set_yticks(ticks)
     # ax.set_yticklabels(ticklabels)
-    ax.set_title("∥x∥")
+    ax.set_title("$(r12)∥C*x∥")
 
     ax = axs[6]
+    himg5 = ax.imshow(reverse(penP6; dims=1); extent = extent, vmin=0, vmax=vmaxP)
+    ax.set_xlabel("x1")
+    #ax.set_ylabel("x2")
+    # ax.set_xticks(ticks)
+    # ax.set_xticklabels(ticklabels)
+    # ax.set_yticks(ticks)
+    # ax.set_yticklabels(ticklabels)
+    ax.set_title("|C*x|+$(r12)∥C*x∥²")
+
+    ax = axs[7]
     plt.colorbar(himg1, ax=ax, fraction=1.0, extend="max")
     ax.set_visible(false)
 
     axs
 end
 
-function penP1P2P3P4(penfn1, penfn2, penfn3, penfn4, x, x1s, x2s)
-    [penfn1([x1+x[1], x2+x[2]])+penfn2([x1+x[1], x2+x[2]])+penfn3([x1+x[1], x2+x[2]])+penfn4([x1+x[1], x2+x[2]]) for x1 in x1s, x2 in x2s],
+function penP1P2P3P4(penfn1, penfn2, penfn3, penfn4, x, x1s, x2s, r12)
+    [penfn1([x1+x[1], x2+x[2]])+penfn2([x1+x[1], x2+x[2]])+penfn3([x1+x[1], x2+x[2]])+r12*penfn4([x1+x[1], x2+x[2]]) for x1 in x1s, x2 in x2s],
     [penfn1([x1+x[1], x2+x[2]]) for x1 in x1s, x2 in x2s],
     [penfn2([x1+x[1], x2+x[2]]) for x1 in x1s, x2 in x2s],
     [penfn3([x1+x[1], x2+x[2]]) for x1 in x1s, x2 in x2s],
-    [penfn4([x1+x[1], x2+x[2]]) for x1 in x1s, x2 in x2s]
+    [penfn4([x1+x[1], x2+x[2]]) for x1 in x1s, x2 in x2s],
+    [penfn3([x1+x[1], x2+x[2]])+r12*penfn4([x1+x[1], x2+x[2]]) for x1 in x1s, x2 in x2s]
 end
 
 using Convex, ECOS
@@ -266,27 +277,28 @@ A = [  0.642854 0.406794;-0.728747 -1.3357]
 b = [-0.7763834317899838, -0.4248008996625347]
 B = [ -0.216811 -0.362751; -1.15347 -0.0527866]
 C = [ -0.0681416 0.739463; -1.02285 -0.154347]
-δ=0
+δ=0; r12 = 0.1
 x = Variable(2)
 pen_data(x) = norm(A*x - b,2)^2
 pen_nn(x) = norm(min.(0,B*x))^2
 pen_spars1(x) = sum(sqrt.((C*x).^2 .+ δ)) # sqrt(norm(C*x,1)^2+δ) # sqrt(norm(C*x)^2+δ)
-pen_spars2(x) = norm(x, 2)
+pen_spars2(x) = norm(C*x)^2 #norm(x, 2)
+pen_spars12(x) = norm(C*x,1)+r12*norm(C*x)^2
 problem = minimize(sumsquares(A*x - b) + sumsquares(min(0,B*x)) + sumsquares(x))
 solve!(problem, ECOS.Optimizer; silent_solver = true)
 xsol = x.value
 
 n = 10; vmax = 6
-pensum, penP1, penP2, penP3, penP4 = penP1P2P3P4(pen_data, pen_nn, pen_spars1, pen_spars2, xsol, -n:0.1:n , -n:0.1:n)
+pensum, penP1, penP2, penP3, penP4, penP5 = penP1P2P3P4(pen_data, pen_nn, pen_spars1, pen_spars2, xsol, -n:0.1:n , -n:0.1:n, r12)
 extent = (xsol[1]-n,xsol[1]+n,xsol[2]-n,xsol[2]+n)
-axs = plotP(pensum, penP1, penP2, penP3, penP4, extent, vmax)
+axs = plotP(pensum, penP1, penP2, penP3, r12*penP4, penP5, extent, vmax, r12)
 ax = axs[1]
 ax.plot([xsol[1]], [xsol[2]], color="red", marker="x", linewidth = 3)
 
 plt.savefig("convex2Dplot_delta$(δ).png")
 
 slope = 4; αs = -1:0.01:1
-fs = zeros(length(αs),5)
+fs = zeros(length(αs),6)
 for (i,α) in enumerate(αs)
     x2 = α*10
     x1 = slope*α+3
@@ -295,7 +307,35 @@ for (i,α) in enumerate(αs)
     fs[i,3] = pen_nn(x)
     fs[i,4] = pen_spars1(x)
     fs[i,5] = pen_spars2(x)
+    fs[i,6] = pen_spars1(x)+r12*pen_spars2(x)
     fs[i,1] = fs[i,2]+100fs[i,3]+2fs[i,4]+2fs[i,5]
 end
 plotW(-10:0.1:10,fs,"convex1Dplot_delta$(δ).png"; title="", xlbl = "α", ylbl = "penalty",
-                legendstrs = ["1","1","1","1","1"], legendloc=0, arrange=:horizontal)
+                legendstrs = ["1","1","1","1","1","1"], legendloc=0, arrange=:horizontal)
+
+# mp4
+using VideoIO
+encoder_options = (crf=23, preset="medium")
+clamp_level=1.0
+X_max = maximum(abs,X)*clamp_level; Xnor = X./X_max;  X_clamped = clamp.(Xnor,0.,1.)
+Xuint8 = UInt8.(round.(map(clamp01nan, X_clamped)*255))
+
+VideoIO.save("$(dataset)_$(SNR)dB.mp4", reshape.(eachcol(Xuint8),imgsz...), framerate=30, encoder_options=encoder_options) # compatible with ppt (best)
+#VideoIO.save("$(dataset)_$(SNR)dB.mpg", reshape.(eachcol(Xuint8),imgsz...), framerate=30)
+VideoIO.save("$(dataset)_$(SNR)dB.mpg", reshape.(eachcol(Xuint8),imgsz...), framerate=30) # compatible with ppt
+VideoIO.save("$(dataset)_$(SNR)dB.avi", reshape.(eachcol(Xuint8),imgsz...), framerate=30) # compatible with ppt
+
+# using VideoIO
+# framestack = map(x->rand(UInt8, 100, 100), 1:100) #vector of 2D arrays
+
+# encoder_options = (crf=23, preset="medium")
+# framerate=24
+# open_video_out("video.mp4", framestack[1], framerate=framerate, encoder_options=encoder_options) do writer
+#     for frame in framestack
+#         write(writer, frame)
+#     end
+# end
+
+# avi, gif
+Images.save("$(dataset)_$(SNR)dB.avi",reshape(X_clamped,imgsz...,lengthT)) # Not compatible with ppt
+Images.save("$(dataset)_$(SNR)dB.gif",reshape(X_clamped,imgsz...,lengthT)) # compatible with ppt but no play bar

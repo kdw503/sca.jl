@@ -105,14 +105,15 @@ function load_urban()
     X, imgsz, nBand, ncells, gtncells, Dict()
 end
 
-function load_fakecells(;SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, useCalciumT=false, jitter=0,
-        only2cells=false, save_maxSNR_X=false, save_gtimg=false)
+function load_fakecells(;SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, bias=0.1, useCalciumT=false,
+        jitter=0, only2cells=false, save_maxSNR_X=false, save_X=false, save_gtimg=false)
     dirpath = joinpath(datapath,"fakecells")
     calciumstr = useCalciumT ? "_calcium" : ""
-    fprefix = "fakecells$(calciumstr)_sz$(imgsz)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR)"
+    fprefix = "fakecells$(calciumstr)_sz$(imgsz)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR)_bias$(bias)"
     dfprefix = joinpath(dirpath,fprefix)
     X, imgsz, fakecells_dic, img_nl, maxSNR_X = loadfakecell(Float64, dfprefix*".jld", only2cells=only2cells,
-        fovsz=imgsz, imgsz=imgsz, lengthT=lengthT, useCalciumT=useCalciumT, jitter=jitter, SNR=SNR, save=true);
+        fovsz=imgsz, imgsz=imgsz, lengthT=lengthT, bias=bias, useCalciumT=useCalciumT, jitter=jitter, SNR=SNR,
+        save=true);
     gtncells = fakecells_dic["gt_ncells"]
     if save_gtimg
         gtW = fakecells_dic["gtW"]; gtH = fakecells_dic["gtH"]
@@ -123,12 +124,18 @@ function load_fakecells(;SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, use
     if save_maxSNR_X
         imsaveW(dfprefix*"_maxSNR_W.png", maxSNR_X, imgsz, borderwidth=1,colors=bbw())
     end
+    if save_X
+        options = (crf=23, preset="medium")
+        clamp_level=1.0; X_max = maximum(abs,X)*clamp_level; Xnor = X./X_max;  X_clamped = clamp.(Xnor,0.,1.)
+        Xuint8 = UInt8.(round.(map(clamp01nan, X_clamped)*255))
+        VideoIO.save(dfprefix*".mp4", reshape.(eachcol(Xuint8),imgsz...), framerate=30, encoder_options=options)
+    end
     ncells = user_ncells==0 ? gtncells + 8 : user_ncells
     X, imgsz, lengthT, ncells, gtncells, fakecells_dic
 end
 
 function load_data(dataset; SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, useCalciumT=false,
-        jitter=0, save_maxSNR_X=false, save_gtimg=false)
+        jitter=0, bias=0.1, save_maxSNR_X=false, save_X=false, save_gtimg=false)
     if dataset == :cbclface
         println("loading CBCL face dataset")
         load_cbcl()
@@ -150,10 +157,11 @@ function load_data(dataset; SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, 
     elseif dataset == :fakecells
         println("loading fakecells")
         load_fakecells(only2cells=false, SNR=SNR, user_ncells=user_ncells, imgsz=imgsz, lengthT=lengthT,
-            useCalciumT=useCalciumT, jitter=jitter, save_maxSNR_X=save_maxSNR_X, save_gtimg=save_gtimg)
+            bias=bias, useCalciumT=useCalciumT, jitter=jitter, save_maxSNR_X=save_maxSNR_X, save_X = save_X,
+            save_gtimg=save_gtimg)
     elseif dataset == :fakecellsmall
         println("loading fakecells with only two cells")
-        load_fakecells(only2cells=true, SNR=SNR, user_ncells=6, imgsz=(20,30), lengthT=lengthT,
+        load_fakecells(only2cells=true, SNR=SNR, user_ncells=6, imgsz=(20,30), lengthT=lengthT, bias=bias,
             useCalciumT=useCalciumT,jitter=jitter, save_maxSNR_X=save_maxSNR_X, save_gtimg=save_gtimg)
     else
         error("Not supported dataset")
@@ -162,13 +170,14 @@ end
 
 #======== Image Save ==========================================================#
 
-function imsave_data(dataset,fprefix,W,H,imgsz,lengthT; mssdwstr="", mssdhstr="", saveH=true)
+function imsave_data(dataset,fprefix,W,H,imgsz,lengthT; mssdwstr="", mssdhstr="",
+        signedcolors=g1wm(),saveH=true)
     if dataset == :cbclface
         println("Saving image of CBCL face dataset")
-        imsave_cbcl(fprefix,W,H,imgsz,lengthT)
+        imsave_cbcl(fprefix,W,H,imgsz,lengthT; signedcolors=signedcolors)
     elseif dataset == :orlface
         println("Saving image of ORL face dataset")
-        imsave_orl(fprefix,W,H,imgsz,lengthT)
+        imsave_orl(fprefix,W,H,imgsz,lengthT; signedcolors=signedcolors)
     elseif dataset == :natural
         println("Saving image of natural image")
         imsave_natural(fprefix,W,H,imgsz,lengthT)
@@ -180,16 +189,21 @@ function imsave_data(dataset,fprefix,W,H,imgsz,lengthT; mssdwstr="", mssdhstr=""
         imsave_urban(fprefix,W[:,2:7],H[2:7,:],imgsz,lengthT)
     elseif dataset == :neurofinder
         println("Saving image of Neurofinder dataset")
-        imsave_neurofinder(fprefix,W,H,imgsz,lengthT, saveH=saveH)
+        imsave_neurofinder(fprefix,W,H,imgsz,lengthT, signedcolors=signedcolors, saveH=saveH)
     elseif dataset == :fakecells
         println("Saving image of fakecells")
-        imsave_fakecell(fprefix,W,H,imgsz,lengthT; mssdwstr=mssdwstr, mssdhstr=mssdhstr, saveH=saveH)
+        imsave_fakecell(fprefix,W,H,imgsz,lengthT; mssdwstr=mssdwstr, mssdhstr=mssdhstr,
+                        signedcolors=signedcolors, saveH=saveH)
     elseif dataset == :fakecellsmall
         println("loading fakecells with only two cells")
-        imsave_fakecell(fprefix,W,H,imgsz,lengthT; mssdwstr=mssdwstr, mssdhstr=mssdhstr, saveH=saveH)
+        imsave_fakecell(fprefix,W,H,imgsz,lengthT; mssdwstr=mssdwstr, mssdhstr=mssdhstr,
+                        signedcolors=signedcolors, saveH=saveH)
     end
 end
 
+dgwm() = (colorant"darkgreen", colorant"white", colorant"magenta")
+dgwdm() = (colorant"darkgreen", colorant"white", colorant"darkmagenta")
+bwm() = (colorant"blue", colorant"white", colorant"magenta")
 g1wm() = (colorant"green1", colorant"white", colorant"magenta")
 bbw() = (colorant"black", colorant"black", colorant"white")
 bgw() = (colorant"black", colorant"gray", colorant"white")
@@ -268,7 +282,7 @@ function imsave_neurofinder(fprefix,W,H,imgsz,tlength; gridcols=5, borderwidth=1
     ncells = size(W,2)
     for i = 1:ncells÷gridcols
         imsaveW(fprefix*"_W_$(i).png",W[:,((i-1)*gridcols+1):(i*gridcols)],imgsz;
-                gridcols=gridcols,borderwidth=borderwidth)
+                gridcols=gridcols,colors=signedcolors,borderwidth=borderwidth)
     end
     saveH && imsaveH(fprefix*"_H.png", H, tlength; colors=signedcolors)
 end

@@ -34,25 +34,10 @@ plt.ioff()
 dr_method = eval(Meta.parse(ARGS[1])); num_trials = eval(Meta.parse(ARGS[2]))
 @show dr_method, num_trials
 
-frn = "IMAGES.mat"
-dd = matread(frn)
-img = dd["IMAGES"]
-szh,szv,numimgs = size(img)
-batch_size = 100; ncomps = 64; subimgsz = 8
-L = subimgsz^2
-BUFF = 4 # border pixels buffer
-W = zeros(L,ncomps)
-X = zeros(L,batch_size*num_trials)
-# for i=1:numimgs
-for t=1:num_trials
-    i=Int(ceil(numimgs*rand()))
-    this_image=img[:,:,i]
-    for j=1:batch_size
-        r=Int(BUFF+ceil((szv-subimgsz-2*BUFF)*rand()));
-        c=Int(BUFF+ceil((szh-subimgsz-2*BUFF)*rand()));
-        X[:,(i-1)*batch_size+j]=reshape(this_image[r:r+subimgsz-1,c:c+subimgsz-1],L,1);
-    end
-end
+X, imgsz, lengthT, ncells0, gtncells, datadic = load_data(:natural)
+szh,szv,numimgs = imgsz..., lengthT
+ncomps = 64; subimgsz = 8
+
 if dr_method == :ksvd
     W, H = ksvd(
         X,
