@@ -47,6 +47,7 @@ useMedianFilter = false
 pwradj = :none; tol=1e-6 # -1 means don't use convergence criterion
 show_trace=true; show_inner_trace = true; savefigure = true
 plotiterrng=1:1; plotinneriterrng=1:1
+makepositive = false
 
 @show datasets, SNRs, maxiter
 @show λs, βs, method, αs, nclsrng
@@ -128,6 +129,7 @@ for dataset in datasets
                         iter = length(trs)-1
                         fprefix3 = fprefix2*"_tol$(tol)_iter$(iter)_nits$(nitersum)_rt"*@sprintf("%1.2f",rt2)
                         if savefigure
+                            makepositive && flip2makepos!(W3,H3)
                             imsave_data(dataset,fprefix3,W3,H3,imgsz,100; saveH=true)
                             length(f_xs) > 1 && begin
                                 method ∈ [:OCA] ? plot_convergence(fprefix3,x_abss,f_xs; title="convergence (OCA)") : 
@@ -226,19 +228,38 @@ for dataset in datasets
     # TODO : plot factors vs. rts
 end
 
-dataset = :fakecells; SNR=-20; initmethod=:isvd; initpwradj=:wh_normalize
-useMedianFilter = true; medT = true; medS = false
-medstr = useMedianFilter ? medT ? medS ? "_medT_medS" : "_medT" : "medT" : ""
-datastr = dataset == :fakecells ? "_fc$(SNR)dB" : "_$(dataset)"
 
-λ1 = λ2 = 1000; β1 = β2 = 1; α = 0.1
-X, imgsz, lengthT, ncells0, gtncells, datadic = load_data(dataset; SNR=SNR, useCalciumT=true, save_maxSNR_X=true);
+
+dataset = :fakecells; SNR=20; initmethod=:isvd; initpwradj=:wh_normalize
+useFilter = dataset ∈ [:neurofinder,:fakecells] ? true : false
+filter=:meanT # :medT, :medS
+filterstr = useFilter ? "_$(filter)" : ""
+datastr = dataset == :fakecells ? "_fc$(SNR)dB" : "_$(dataset)"
+save_figure = true; makepositive = false
+
+X, imgsz, lengthT, ncells0, gtncells, datadic = load_data(dataset; SNR=SNR, bias=0.1, useCalciumT=true,
+                                                        save_maxSNR_X=false, save_X=false);
 ncells = ncells0
-if useMedianFilter
-    if medT
+
+# XmedT = mapwindow(median!, X, (1,3)) # just for each row
+# XmeanT = mapwindow(mean, X, (1,3)) # just for each row
+# rsimg = reshape(X,imgsz...,lengthT)
+# rsimgm = mapwindow(median!, rsimg, (3,3,1))
+# XmedS = reshape(rsimgm,*(imgsz...),lengthT)
+# X = vcat(X,XmedT,XmeanT,XmedS)
+# options = (crf=23, preset="medium")
+# clamp_level=1.0; X_max = maximum(abs,X)*clamp_level; Xnor = X./X_max;  X_clamped = clamp.(Xnor,0.,1.)
+# Xuint8 = UInt8.(round.(map(clamp01nan, X_clamped)*255))
+# VideoIO.save("$(datastr)_$(SNR)dB_allprepro_original_medT_meanT_medS.mp4", reshape.(eachcol(Xuint8),imgsz[1],4*imgsz[2]), framerate=30, encoder_options=options)
+
+if useFilter
+    if filter == :medT
         X = mapwindow(median!, X, (1,3)) # just for each row
     end
-    if medS
+    if filter == :meanT
+        X = mapwindow(mean, X, (1,3)) # just for each row
+    end
+    if filter == :medS
         rsimg = reshape(X,imgsz...,lengthT)
         rsimgm = mapwindow(median!, rsimg, (3,3,1))
         X = reshape(rsimgm,*(imgsz...),lengthT)
@@ -248,128 +269,144 @@ rt1 = @elapsed W0, H0, Mw, Mh, Wp, Hp, d = initsemisca(X, ncells, initmethod=ini
 Mw0, Mh0 = copy(Mw), copy(Mh)
 rt1cd = @elapsed Wcd, Hcd = NMF.nndsvd(X, ncells, variant=:ar)
 Wcd0, Hcd0 = copy(Wcd), copy(Hcd)
+save_figure && begin
+    normalizeW!(Wp,Hp); W2,H2 = sortWHslices(Wp,Hp)
+    imsave_data(dataset,"$(initmethod)$(datastr)$(filterstr)_rti$(rt1)",W2,H2,imgsz,100; signedcolors=dgwm(), saveH=false)
+end
 
-tol=1e-7; uselogscale=true; save_figure=true
-methods = [:OCA, :SCA]
-maxitervec = [(10,500)]
+sd_group=:component; reg = :W1M2
+#sd_group=:column; reg = :W1M2
+l1l2ratio = 0.1; 
+λ = 0; β = 10; α = 0.1
+tol=1e-7; uselogscale=true; save_figure=true; optimmethod = :optim_lbfgs
+ls_method = :ls_BackTracking
+scamaxiter = 100; halsmaxiter = 100; inner_maxiter = 50; ls_maxiter = 500
+methods = [:SCA] # :HALS
+isplotxandg = false; plotnum = isplotxandg ? 3 : 1
+
 penaltystr = uselogscale ? "log10(penalty)" : "penalty"
-xdiffstr = uselogscale ? "log10(x difference)" : "x difference"
-maxgxstr = uselogscale ? "log10(maximum(g(x)))" : "maximum(g(x))"
-legendstrs = map(maxiters->"maxiter=$(maxiters[1]),inner_maxiter=$(maxiters[2])", maxitervec)
-figfx0, axisfx0 = plt.subplots(1,1, figsize=(5,4))
+if isplotxandg
+    xdiffstr = uselogscale ? "log10(x difference)" : "x difference"
+    maxgxstr = uselogscale ? "log10(maximum(g(x)))" : "maximum(g(x))"
+end
+figfx0, axisfx0 = plt.subplots(1,1, figsize=(5,4))  # SCA vs HALS fx iter
 axisfx0.set_title("f(x)")
 axisfx0.set_ylabel(penaltystr,fontsize = 12)
 axisfx0.set_xlabel("iterations",fontsize = 12)
-figfx0t, axisfx0t = plt.subplots(1,1, figsize=(5,4))
+figfx0t, axisfx0t = plt.subplots(1,1, figsize=(5,4))  # SCA vs HALS fx time
 axisfx0t.set_title("f(x)")
 axisfx0t.set_ylabel(penaltystr,fontsize = 12)
 axisfx0t.set_xlabel("time",fontsize = 12)
 for method = methods
-    @show optimmethod
-    figfx, axisfx = plt.subplots(1,1, figsize=(5,4))
-    axisfx.set_title("f(x)")
-    axisfx.set_ylabel(penaltystr,fontsize = 12)
-    figfxt, axisfxt = plt.subplots(1,1, figsize=(5,4))
-    axisfxt.set_title("f(x)")
-    axisfxt.set_ylabel(penaltystr,fontsize = 12)
-    figxdiff, axisxdiff = plt.subplots(1,1, figsize=(5,4))
-    axisxdiff.set_title("x_diff")
-    axisxdiff.set_ylabel(xdiffstr,fontsize = 12)
-    figxdifft, axisxdifft = plt.subplots(1,1, figsize=(5,4))
-    axisxdifft.set_title("x_diff")
-    axisxdifft.set_ylabel(xdiffstr,fontsize = 12)
-    figngx, axisngx = plt.subplots(1,1, figsize=(5,4))
-    axisngx.set_title("maximum(g(x))")
-    axisngx.set_ylabel(maxgxstr,fontsize = 12)
-    figngxt, axisngxt = plt.subplots(1,1, figsize=(5,4))
-    axisngxt.set_title("maximum(g(x))")
-    axisngxt.set_ylabel(maxgxstr,fontsize = 12)
-    for ax in [axisfx,axisxdiff,axisngx]
-        ax.set_xlabel("iterations",fontsize = 12)
+    @show method
+    figs = []; axes = []
+    yaxisstrs = [("f(x)"),("x_diff"),("maximum(g(x))")]; xaxisstrs = ["iterations","time"]
+    for yaxisstr in yaxisstrs[1:plotnum], xaxisstr in xaxisstrs
+        fig, ax = plt.subplots(1,1, figsize=(5,4))
+        ax.set_title(yaxisstr)
+        ax.set_ylabel(penaltystr,fontsize = 12)
+        ax.set_xlabel(xaxisstr,fontsize = 12)
+        push!(figs,fig); push!(axes,ax)
+        # axis.axis(axis) # [xamin, xamax, yamin, yamax]
     end
-    for ax in [axisfxt,axisxdifft,axisngxt]
-        ax.set_xlabel("time",fontsize = 12)
-    end
-    # ax.axis(axis) # [xamin, xamax, yamin, yamax]
-    for (idx,(maxiter,inner_maxiter)) = enumerate(maxitervec)
-        @show maxiter, inner_maxiter
+    # innerloopvec = [(:ls_BackTracking,10),(:ls_BackTracking,50),(:ls_BackTracking,100),(:ls_BackTracking,500),(:ls_BackTracking,1000),(:ls_BackTracking,5000)] #,
+    # legendstrs = map(innerloop->"reg=$(innerloop[1]),lsmethod=$(innerloop[2])", innerloopvec)
+    maxiterstr = method == :HALS ? "it$(halsmaxiter)" : "it$(scamaxiter)"
+    fprex = "$(method)$(datastr)$(filterstr)"
+
+    innerloopvec = [("λ","β"),(0,50),(0,10)] #,
+    legendstrs = map(innerloop->"$(innerloopvec[1][1])=$(innerloop[1]), $(innerloopvec[1][2])=$(innerloop[2])", innerloopvec[2:end])
+    title = join([innerloopvec[1]...],"_vs_")
+    for (idx,(λ, β)) = enumerate(innerloopvec[2:end])
+
+    # innerloopvec = [("ls_maxiter"),(0),(500)] #,
+    # legendstrs = map(innerloop->"$(innerloopvec[1][1])=$(innerloop[1]), ", innerloopvec[2:end])
+    # title = ("withLS_vs_woLS")
+    # for (idx,(ls_maxiter)) = enumerate(innerloopvec[2:end])
+
+    # innerloopvec = [("sd_group","reg"),(:component,:W1M2)] #,(:whole,:WH1)
+    # legendstrs = map(innerloop->"$(innerloopvec[1][1])=$(innerloop[1]), $(innerloopvec[1][2])=$(innerloop[2])", innerloopvec[2:end])
+    # title = ("whole_vs_column")
+    # for (idx,(sd_group, reg)) = enumerate(innerloopvec[2:end])
+        scaparamstr = "_$(reg)_$(sd_group)_$(optimmethod)_$(maxiterstr)_lsit$(ls_maxiter)_b$(β)_l$(λ)"
+        λ1 = λ2 = λ; β1 = β2 = β
         if method == :SCA
             Mw, Mh = copy(Mw0), copy(Mh0)
-            stparams = StepParams(sd_group=sd_group, optimmethod=optimmethod, approx=approx,
-                β1=β1, β2=β2, λ1=λ1, λ2=λ2, reg=regularization, order=order, M2power=M2power,
-                useRelaxedL1=useRelaxedL1, σ0=100*std(W0)^2, r=0.1, hfirst=true, processorder=:none,
-                poweradjust=pwradj, rectify=rectify, objective=objective)
-            lsparams = LineSearchParams(method=ls_method, c=0.5, α0=2.0, ρ=0.5, maxiter=maxiter, show_lsplot=false,
+            stparams = StepParams(sd_group=sd_group, optimmethod=optimmethod, approx=true,
+                β1=β1, β2=β2, λ1=λ1, λ2=λ2, reg=reg, l1l2ratio=l1l2ratio, order=1, M2power=1,
+                useRelaxedL1=false, σ0=100*std(W0)^2, r=0.1, hfirst=true, processorder=:none,
+                poweradjust=:none, rectify=:none, objective=:normal)
+            lsparams = LineSearchParams(method=ls_method, α0=1.0, c_1=1e-4, maxiter=ls_maxiter, show_lsplot=false,
                 iterations_to_show=[15])
-            cparams = ConvergenceParams(allow_f_increases = false, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
-                x_abstol=tol, successive_f_converge=1, maxiter=maxiter, inner_maxiter=inner_maxiter, store_trace=true,
-                store_inner_trace=true, show_trace=false, show_inner_trace=false, plotiterrng=1:0, plotinneriterrng=1:0)
+            cparams = ConvergenceParams(allow_f_increases = true, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
+                x_abstol=tol, successive_f_converge=1, maxiter=scamaxiter, inner_maxiter=inner_maxiter, store_trace=true,
+                store_inner_trace=true, show_trace=true, show_inner_trace=false, plotiterrng=1:0, plotinneriterrng=1:5)
             rt = @elapsed W1, H1, objvals, trs, nitersum, fxss, xdiffss, ngss = scasolve!(W0, H0, d, Mw, Mh; stparams=stparams,
                                                                             lsparams=lsparams, cparams=cparams);
             save_figure && begin
                 normalizeW!(W1,H1); W2,H2 = sortWHslices(W1,H1)
-                imsave_data(dataset,"SCA$(datastr)$(medstr)_SNR$(SNR)_rti$(rt1)_bw$(β1)_lw$(λ1)_rt$(rt)",W2,H2,imgsz,100; saveH=false)
+                makepositive && flip2makepos!(W2,H2)
+                imsave_data(dataset,"$(fprex)_rti$(rt1)$(scaparamstr)_rt$(rt)",
+                            W2,H2,imgsz,100; signedcolors=dgwm(), saveH=false)
             end
+            fx0 = objvals[1]
         elseif method == :OCA
             Mw, Mh = copy(Mw0), copy(Mh0)
-            stparams = StepParams(sd_group=:component, optimmethod=optimmethod, approx=approx,
-                    β1=β1, β2=0, λ1=λ1, λ2=0, reg=regularization, order=order,
-                    useRelaxedL1=true, σ0=100*std(W0)^2, r=0.1, objective=objective)
-            lsparams = LineSearchParams(method=ls_method, c=0.5, α0=1.0, ρ=0.5, maxiter=50, show_lsplot=true,
+            stparams = StepParams(sd_group=sd_group, optimmethod=:optim_lbfgs, approx=true,
+                    β1=β1, β2=0, λ1=λ1, λ2=0, reg=reg, l1l2ratio=l1l2ratio, order=1,
+                    useRelaxedL1=true, σ0=100*std(W0)^2, r=0.1, objective=:normal)
+            lsparams = LineSearchParams(method=ls_method, α0=1.0, maxiter=1000, show_lsplot=true,
                     iterations_to_show=[1])
             cparams = ConvergenceParams(allow_f_increases = false, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
-                    x_abstol=tol, successive_f_converge=2, maxiter=maxiter, inner_maxiter=inner_maxiter, store_trace=true,
-                    store_inner_trace=true, show_trace=false, show_inner_trace=false, plotiterrng=1:0, plotinneriterrng=1:0)
+                    x_abstol=tol, successive_f_converge=2, maxiter=scamaxiter, inner_maxiter=inner_maxiter, store_trace=true,
+                    store_inner_trace=false, show_trace=false, show_inner_trace=false, plotiterrng=1:0, plotinneriterrng=1:0)
             rt = @elapsed W1, objvals, trs, nitersum, fxss, xdiffss, ngss = ocasolve!(W0, Mw, d; stparams=stparams,
                                                                             lsparams=lsparams, cparams=cparams);
             save_figure && begin
                 H1 = W1\X
                 normalizeW!(W1,H1); W2,H2 = sortWHslices(W1,H1)
-                imsave_data(dataset,"OCA$(datastr)$(medstr)_SNR$(SNR)_rti$(rt1)_bw$(β1)_lw$(λ1)_rt$(rt)",W2,H2,imgsz,100; saveH=false)
+                makepositive && flip2makepos!(W2,H2)
+                imsave_data(dataset,"$(fprex)_rti$(rt1)$(scaparamstr)_rt$(rt)",
+                            W2,H2,imgsz,100; signedcolors=dgwm(), saveH=false)
             end
-        elseif method == :CD
+            fx0 = objvals[1]
+        elseif method == :HALS
             Wcd, Hcd = copy(Wcd0), copy(Hcd0)
-            rt = @elapsed result = NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=50, α=α, l₁ratio=0.5,
+            rt = @elapsed result = NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=halsmaxiter, α=α, l₁ratio=0.5,
                                             tol=tol), X, Wcd, Hcd)
             @show result.converged
             nitersum=result.niters; fxss=copy(result.objvalues); xdiffss=copy(result.objvalues); ngss=copy(result.objvalues)
             save_figure && begin
                 normalizeW!(Wcd,Hcd); Wcd1,Hcd1 = sortWHslices(Wcd,Hcd)
-                imsave_data(dataset,"CD$(datastr)$(medstr)_SNR$(SNR)_rti$(rt1cd)_rt$(rt)",Wcd1,Hcd1,imgsz,100; saveH=false)
+                imsave_data(dataset,"$(fprex)_rti$(rt1cd)_a$(α)_rt$(rt)",Wcd1,Hcd1,imgsz,100; saveH=false)
             end
+            fx0 = result.objvalues[1]
+        else
+            error("Unsupported method $(method)")
         end
-        iterrng = 1:nitersum
-        trng = iterrng/nitersum*rt
+        @show nitersum, length(fxss)
+        iterrng = 0:nitersum; trng = iterrng/nitersum*rt
+        fxss ./= fx0
         uselogscale && (fxss=log10.(fxss); xdiffss=log10.(xdiffss); ngss=log10.(ngss))
-        axisfx.plot(iterrng,fxss)
-        idx == 1 && axisfx0.plot(iterrng,fxss)
-        axisxdiff.plot(iterrng,xdiffss)
-        axisngx.plot(iterrng,ngss)
-        axisfxt.plot(trng,fxss)
-        idx == 1 && axisfx0t.plot(trng,fxss)
-        axisxdifft.plot(trng,xdiffss)
-        axisngxt.plot(trng,ngss)
+        length(fxss) != 0 && begin
+            axes[1].plot(iterrng,fxss); axes[2].plot(trng,fxss)
+            idx == 1 && (axisfx0.plot(iterrng,fxss); axisfx0t.plot(trng,fxss))
+        end
+        plotnum > 1 && length(xdiffss) != 0 && (axes[3].plot(iterrng,xdiffss); axes[4].plot(trng,xdiffss))
+        plotnum > 1 && length(ngss) != 0 && (axes[5].plot(iterrng,ngss); axes[6].plot(trng,ngss))
     end
-    for ax in [axisfx,axisxdiff,axisngx,axisfxt,axisxdifft,axisngxt]
+    for ax in axes
         ax.legend(legendstrs, fontsize = 12)
     end
-    figfx.savefig("$(optimmethod)_fx.png")
-    figxdiff.savefig("$(optimmethod)_xdiff.png")
-    figngx.savefig("$(optimmethod)_maxgx.png")
-    figfxt.savefig("$(optimmethod)_fx_time.png")
-    figxdifft.savefig("$(optimmethod)_xdiff_time.png")
-    figngxt.savefig("$(optimmethod)_maxgx_time.png")
+    for (i,fig) in enumerate(figs)
+        fig.savefig("$(fprex)_$(title)_$(maxiterstr)_$(yaxisstrs[(i+1)÷2])_$(xaxisstrs[(i+1)%2+1]).png")
+    end
 end
 axisfx0.legend(String.(methods), fontsize = 12)
 axisfx0t.legend(String.(methods), fontsize = 12)
-figfx0.savefig("optim_fx.png")
-figfx0t.savefig("optim_fx_time.png")
+figfx0.savefig("SCA_vs_HALS$(datastr)$(filterstr)_its$(scamaxiter)_ith$(halsmaxiter)_iter.png")
+figfx0t.savefig("SCA_vs_HALS$(datastr)$(filterstr)_its$(scamaxiter)_ith$(halsmaxiter)_time.png")
 close("all")
-
-
-
-
-
 
 
 
@@ -400,3 +437,138 @@ Msparse = stparams.poweradjust ∈ [:M1,:M2]
 
 SCA.penaltyMwMh(Mw,Mh,W0,H0,D,fw,gh,λw,λh,βw,βh,0,Msparse,stparams.order; reg=stparams.reg,
                 M2power=stparams.M2power, objective=stparams.objective, useRelaxedL1=stparams.useRelaxedL1)
+
+
+
+#===== QP solver ===============#
+using OSQP
+
+# minimize        0.5 x' P x + q' x
+# subject to      l <= A x <= u
+
+function QPsolve(P,q,A,u,l)
+    options = Dict(
+        :verbose => false,
+        :eps_abs => 1e-09,
+        :eps_rel => 1e-09,
+        :check_termination => 1,
+        :polish => false,
+        :max_iter => 4000,
+        :rho => 0.1,
+        :adaptive_rho => false,
+        :warm_start => true,
+    )
+
+    model = OSQP.Model()
+    OSQP.setup!(
+        model; P =P, q = q, A = A, l = l, u = u, options...,
+    )
+    results = OSQP.solve!(model)
+    results.x, results.info.obj_val # results.y (parameter for dual problem)
+end
+
+P = [11.0 0.0; 0.0 0.0]
+q = [3.0; 4]
+A = [-1 0; 0 -1; -1 -3; 2 5; 3 4]
+u = [0.0; 0.0; -15; 100; 80]
+l = -Inf * ones(length(u))
+
+QPsolve(sparse(P),q,sparse(A),u,l)
+
+# test with SCA
+W = W0*Mw; b = vec(W)
+m,p = size(W0)
+Aw = zeros(m*p,p^2)
+SCA.FM2A!(W0,Aw)
+P = 2*sparse(Aw'Aw); q = -2*Aw'b
+A = sparse(Aw); l = zeros(m*p); u = Inf*ones(m*p)
+rt = @elapsed x, pen = QPsolve(P,q,A,u,l)
+Mwsol = reshape(x,p,p); W1 = W0*Mwsol; H1 = W1\X
+normalizeW!(W1,H1); W2,H2 = sortWHslices(W1,H1)
+imsave_data(dataset,"test_rt$(rt)",W2,H2,imgsz,100; saveH=false)
+
+#====== SPCA =================#
+using ScikitLearn
+
+dataset = :neurofinder; SNR=-10
+useMedianFilter = true; medT = true; medS = false
+datastr = dataset == :fakecells ? "_fc$(SNR)dB" : "_$(dataset)"
+
+X, imgsz, lengthT, ncells0, gtncells, datadic = load_data(dataset; SNR=SNR, useCalciumT=true, save_maxSNR_X=false);
+ncells = ncells0
+
+@sk_import decomposition: PCA
+rtpca = @elapsed resultpca = fit_transform!(PCA(n_components=ncells,tol=0),X) 
+W0 = copy(reslutpca); H0 = W0\X
+normalizeW!(W0,H0); W2,H2 = sortWHslices(W0,H0)
+imsave_data(dataset,"pca_rt$(rtpca)",W2,H2,imgsz,100; saveH=false)
+
+@sk_import decomposition: SparsePCA
+alpha = 2; ridge_alpha=0.01; max_iter=100; tol=1e-5
+rtspca = @elapsed resultspca = fit_transform!(SparsePCA(n_components=ncells,alpha=alpha,ridge_alpha=ridge_alpha,max_iter=max_iter,tol=tol,verbose=true),X) 
+W0 = copy(resultspca); H0 = W0\X
+normalizeW!(W0,H0); W2,H2 = sortWHslices(W0,H0)
+imsave_data(dataset,"SPCA_$(datastr)_a$(alpha)_ra$(ridge_alpha)_tol$(tol)_miter$(max_iter)_rt$(rtspca)",W2,H2,imgsz,100;
+        signedcolors=dgwm(), saveH=false)
+
+# Parameters:
+    # n_componentsint, default=None
+    # Number of sparse atoms to extract. If None, then n_components is set to n_features.
+
+    # alphafloat, default=1
+    # Sparsity controlling parameter. Higher values lead to sparser components.
+
+    # ridge_alphafloat, default=0.01
+    # Amount of ridge shrinkage to apply in order to improve conditioning when calling the transform method.
+
+    # max_iterint, default=1000
+    # Maximum number of iterations to perform.
+
+    # tolfloat, default=1e-8
+    # Tolerance for the stopping condition.
+
+    # method{‘lars’, ‘cd’}, default=’lars’
+    # Method to be used for optimization. lars: uses the least angle regression method to solve the lasso problem (linear_model.lars_path) cd: uses the coordinate descent method to compute the Lasso solution (linear_model.Lasso). Lars will be faster if the estimated components are sparse.
+
+    # n_jobsint, default=None
+    # Number of parallel jobs to run. None means 1 unless in a joblib.parallel_backend context. -1 means using all processors. See Glossary for more details.
+
+    # U_initndarray of shape (n_samples, n_components), default=None
+    # Initial values for the loadings for warm restart scenarios. Only used if U_init and V_init are not None.
+
+    # V_initndarray of shape (n_components, n_features), default=None
+    # Initial values for the components for warm restart scenarios. Only used if U_init and V_init are not None.
+
+    # verboseint or bool, default=False
+    # Controls the verbosity; the higher, the more messages. Defaults to 0.
+
+    # random_stateint, RandomState instance or None, default=None
+    # Used during dictionary learning. Pass an int for reproducible results across multiple function calls. See Glossary.
+
+# Attributes:
+    # components_ndarray of shape (n_components, n_features)
+    # Sparse components extracted from the data.
+
+    # error_ndarray
+    # Vector of errors at each iteration.
+
+    # n_components_int
+    # Estimated number of components.
+
+    # New in version 0.23.
+
+    # n_iter_int
+    # Number of iterations run.
+
+    # mean_ndarray of shape (n_features,)
+    # Per-feature empirical mean, estimated from the training set. Equal to X.mean(axis=0).
+
+    # n_features_in_int
+    # Number of features seen during fit.
+
+    # New in version 0.24.
+
+    # feature_names_in_ndarray of shape (n_features_in_,)
+    # Names of features seen during fit. Defined only when X has feature names that are all strings.
+
+    # New in version 1.0.
