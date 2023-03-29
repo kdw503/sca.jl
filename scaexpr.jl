@@ -25,14 +25,14 @@ plt.ioff()
 # objective = :normal, :pw, :weighted or :weighted2
 # regularization = Fast SCA(:W1M2,:M1,:M2,:W1,:W2), SCA(:W1M2,:W1Mn) or OCA()
 # sd_group = :whole, :component, :column or :pixel
-#           dataset,   SNRs, maxiter, inner_maxiter, λs, βs,    method,   nclsrng, objective, reg, sd_group, useRelaxedL1, initpwradj
+#           dataset,   SNRs, maxiter, inner_maxiter, βs, αs,    method,   nclsrng, objective, reg, sd_group, useRelaxedL1, initpwradj
 #ARGS =  ["[:neurofinder]","[60]","1","5000","[0]","[10]",":OCA","[40]",":normal",":W1",":component", "true", ":balance"]
 #ARGS =  ["[:cbclface]","[60]","1","5000","[0]","[10]",":SCA","[40]",":normal",":WH1",":whole", "false", ":wh_normalize"]
 #ARGS =  ["[:cbclface]","[60]","10","500","[0]","[10]",":SCA","[40]",":normal",":WH1",":whole", "false", ":wh_normalize"]
 datasets = eval(Meta.parse(ARGS[1])); SNRs = eval(Meta.parse(ARGS[2]))
 maxiter = eval(Meta.parse(ARGS[3])); inner_maxiter = eval(Meta.parse(ARGS[4]))
-λs = eval(Meta.parse(ARGS[5])) # be careful not to have spaces in the argument
-βs = eval(Meta.parse(ARGS[6])); αs = βs
+βs = eval(Meta.parse(ARGS[5])) # be careful not to have spaces in the argument
+αs = eval(Meta.parse(ARGS[6])); αs = αs
 method = eval(Meta.parse(ARGS[7])); nclsrng = eval(Meta.parse(ARGS[8]));
 objective = eval(Meta.parse(ARGS[9])); regularization = eval(Meta.parse(ARGS[10]))
 sd_group = eval(Meta.parse(ARGS[11])); useRelaxedL1 = eval(Meta.parse(ARGS[12]))
@@ -40,7 +40,7 @@ initpwradj = eval(Meta.parse(ARGS[13]))
 
 optimmethod = :optim_lbfgs; approx = true; M2power = 1
 ls_method = :ls_BackTracking
-rectify = :none # (rectify,λ)=(:pinv,0) (cbyc_sd method)
+rectify = :none # (rectify,β)=(:pinv,0) (cbyc_sd method)
 order = regularization ∈ [:M1, :WH1,:W1M2] ? 1 : 2; regWonly = false
 initmethod = :isvd; initfn = SCA.nndsvd2
 useMedianFilter = false
@@ -50,10 +50,10 @@ plotiterrng=1:1; plotinneriterrng=1:1
 makepositive = false
 
 @show datasets, SNRs, maxiter
-@show λs, βs, method, αs, nclsrng
+@show βs, αs, method, αs, nclsrng
 flush(stdout)
-dataset = datasets[1]; SNR = SNRs[1]; λ = λs[1]; λ1 = λ; λ2 = λ;
-β = βs[1]; β1 = β; β2 = regWonly ? 0. : β; α = αs[1]; ncls = nclsrng[1]
+dataset = datasets[1]; SNR = SNRs[1]; β = βs[1]; β1 = β; β2 = β;
+α = αs[1]; α1 = α; α2 = regWonly ? 0. : α; α = αs[1]; ncls = nclsrng[1]
 for dataset in datasets
     rt1s=[]; rt2s=[]; mssds=[]; mssdHs=[]
     for SNR in SNRs # this can be change ncellss, factors
@@ -74,7 +74,7 @@ for dataset in datasets
                 @show initmethod, initpwradj
                 # Initialize
                 rt1 = @elapsed W0, H0, Mw, Mh, Wp, Hp, d = initsemisca(X, ncells, initmethod=initmethod,
-                                                        poweradjust=initpwradj, initfn=initfn, β1=βs[1])
+                                                        poweradjust=initpwradj, initfn=initfn, α1=αs[1])
                 initstr = "$(initmethod)"
                 fprefix0 = "Init$(initdatastr)_$(initstr)_$(initpwradj)_rt"*@sprintf("%1.2f",rt1)
                 Mw0, Mh0 = copy(Mw), copy(Mh)
@@ -89,18 +89,18 @@ for dataset in datasets
                 end
                 fprefix1 = "$(initdatastr)_$(initstr)_$(initpwradj)"
                 push!(rt1s,rt1)
-                for λ in λs
-                    λ1 = λ; λ2 = λ
-                    for β in βs
-                        @show SNR, ncells, λ, β
-                        β1 = β; β2 = regWonly ? 0. : β
+                for β in βs
+                    β1 = β; β2 = β
+                    for α in αs
+                        @show SNR, ncells, β, α
+                        α1 = α; α2 = regWonly ? 0. : α
                         flush(stdout)
-                        paramstr="_Obj$(objective)_Reg$(regularization)_λw$(λ1)_λh$(λ2)_βw$(β1)_βh$(β2)"
+                        paramstr="_Obj$(objective)_Reg$(regularization)_βw$(β1)_βh$(β2)_αw$(α1)_αh$(α2)"
                         fprefix2 = "$(method)$(fprefix1)_$(sd_group)_$(optimmethod)"*paramstr
                         Mw, Mh = copy(Mw0), copy(Mh0) # reload initialized Mw, Mh
                         if method ∈ [:SCA] # Fast Symmetric Component Analysis
                             stparams = StepParams(sd_group=sd_group, optimmethod=optimmethod, approx=approx,
-                                    β1=β1, β2=β2, λ1=λ1, λ2=λ2, reg=regularization, order=order, M2power=M2power,
+                                    α1=α1, α2=α2, β1=β1, β2=β2, reg=regularization, order=order, M2power=M2power,
                                     useRelaxedL1=useRelaxedL1, σ0=100*std(W0)^2, r=0.1, hfirst=true, processorder=:none,
                                     poweradjust=pwradj, rectify=rectify, objective=objective)
                             lsparams = LineSearchParams(method=ls_method, c=0.5, α0=2.0, ρ=0.5, maxiter=maxiter, show_lsplot=false,
@@ -113,7 +113,7 @@ for dataset in datasets
                             x_abss, xw_abss, xh_abss, f_xs, f_rel, semisympen, regW, regH = getdata(trs)
                         elseif method ∈ [:OCA] # Fast Orthogonal Component Analysis
                             stparams = StepParams(sd_group=sd_group, optimmethod=optimmethod, approx=approx, 
-                                    β1=β1, β2=0, λ1=λ1, λ2=0, reg=regularization, order=order, 
+                                    α1=α1, α2=0, β1=β1, β2=0, reg=regularization, order=order, 
                                     useRelaxedL1=useRelaxedL1, σ0=100*std(W0)^2, r=0.1, objective=objective)
                             lsparams = LineSearchParams(method=ls_method, c=0.5, α0=1.0, ρ=0.5, maxiter=50, show_lsplot=true,
                                     iterations_to_show=[1])
@@ -167,7 +167,7 @@ for dataset in datasets
                 fprefix1 = "CD$(initdatastr)_normalize"
                 push!(rt1s,rt1)
                 Wcd0 = copy(Wcd); Hcd0 = copy(Hcd)
-                for α in βs # best α = 0.1
+                for α in αs # best α = 0.1
                     @show α
                     Wcd, Hcd = copy(Wcd0), copy(Hcd0);
                     usingNMF = true
@@ -178,12 +178,12 @@ for dataset in datasets
                         iter = result.niters; converged = result.converged
                         fprefix3 = fprefix2*"_tol$(tol)_iter$(iter)_$(converged)_rt"*@sprintf("%1.2f",rt2)
                     else
-                        cdorder=1; cdpwradj=:none; cdβ1=α; cdβ2=0
-                        stparams = StepParams(β1=cdβ1, β2=cdβ2, order=cdorder, hfirst=true, processorder=:none, poweradjust=cdpwradj,
+                        cdorder=1; cdpwradj=:none; cdα1=α; cdα2=0
+                        stparams = StepParams(α1=cdα1, α2=cdα2, order=cdorder, hfirst=true, processorder=:none, poweradjust=cdpwradj,
                                             rectify=:truncate) 
                         cparams = ConvergenceParams(allow_f_increases = true, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
                                     x_abstol=tol, successive_f_converge=2, maxiter=maxiter, store_trace=true, show_trace=true)
-                        paramstr="_L$(cdorder)_βw$(cdβ1)_βh$(cdβ2)"
+                        paramstr="_L$(cdorder)_αw$(cdα1)_αh$(cdα2)"
                         fprefix2 = fprefix1*"_$(cdpwradj)"*paramstr
                         rt2 = @elapsed objvals, trs = SCA.halssolve!(X, Wcd, Hcd; stparams=stparams, cparams=cparams);
                         iter = length(trs)
@@ -228,9 +228,7 @@ for dataset in datasets
     # TODO : plot factors vs. rts
 end
 
-
-
-dataset = :fakecells; SNR=20; initmethod=:isvd; initpwradj=:wh_normalize
+dataset = :fakecells; SNR=0; initmethod=:isvd; initpwradj=:wh_normalize
 useFilter = dataset ∈ [:neurofinder,:fakecells] ? true : false
 filter=:meanT # :medT, :medS
 filterstr = useFilter ? "_$(filter)" : ""
@@ -274,13 +272,14 @@ save_figure && begin
     imsave_data(dataset,"$(initmethod)$(datastr)$(filterstr)_rti$(rt1)",W2,H2,imgsz,100; signedcolors=dgwm(), saveH=false)
 end
 
-sd_group=:component; reg = :W1M2
+sd_group=:column; reg = :W1; M2power=1
+poweradjust=:balance
 #sd_group=:column; reg = :W1M2
-l1l2ratio = 0.1; 
-λ = 0; β = 10; α = 0.1
-tol=1e-7; uselogscale=true; save_figure=true; optimmethod = :optim_lbfgs
+l1l2ratio = 0.1
+α = 10; β = 0; λ = 0.1
+tol=1e-6; uselogscale=true; save_figure=true; optimmethod = :SB_newton
 ls_method = :ls_BackTracking
-scamaxiter = 100; halsmaxiter = 100; inner_maxiter = 50; ls_maxiter = 500
+scamaxiter = 300; halsmaxiter = 100; inner_maxiter = 20; ls_maxiter = 500
 methods = [:SCA] # :HALS
 isplotxandg = false; plotnum = isplotxandg ? 3 : 1
 
@@ -290,17 +289,17 @@ if isplotxandg
     maxgxstr = uselogscale ? "log10(maximum(g(x)))" : "maximum(g(x))"
 end
 figfx0, axisfx0 = plt.subplots(1,1, figsize=(5,4))  # SCA vs HALS fx iter
-axisfx0.set_title("f(x)")
+axisfx0.set_title("log(f(x))")
 axisfx0.set_ylabel(penaltystr,fontsize = 12)
 axisfx0.set_xlabel("iterations",fontsize = 12)
 figfx0t, axisfx0t = plt.subplots(1,1, figsize=(5,4))  # SCA vs HALS fx time
-axisfx0t.set_title("f(x)")
+axisfx0t.set_title("log(f(x))")
 axisfx0t.set_ylabel(penaltystr,fontsize = 12)
 axisfx0t.set_xlabel("time",fontsize = 12)
 for method = methods
     @show method
     figs = []; axes = []
-    yaxisstrs = [("f(x)"),("x_diff"),("maximum(g(x))")]; xaxisstrs = ["iterations","time"]
+    yaxisstrs = [("log(f(x))"),("x_diff"),("maximum(g(x))")]; xaxisstrs = ["iterations","time"]
     for yaxisstr in yaxisstrs[1:plotnum], xaxisstr in xaxisstrs
         fig, ax = plt.subplots(1,1, figsize=(5,4))
         ax.set_title(yaxisstr)
@@ -314,10 +313,10 @@ for method = methods
     maxiterstr = method == :HALS ? "it$(halsmaxiter)" : "it$(scamaxiter)"
     fprex = "$(method)$(datastr)$(filterstr)"
 
-    innerloopvec = [("λ","β"),(0,50),(0,10)] #,
+    innerloopvec = [("optimmethod","α","inner_maxiter"),(:optim_lbfgs,500,100),(:SB_newton,500,20),(:SB_lbfgs,500,20)] #,
     legendstrs = map(innerloop->"$(innerloopvec[1][1])=$(innerloop[1]), $(innerloopvec[1][2])=$(innerloop[2])", innerloopvec[2:end])
     title = join([innerloopvec[1]...],"_vs_")
-    for (idx,(λ, β)) = enumerate(innerloopvec[2:end])
+    for (idx,(optimmethod, α, inner_maxiter)) = enumerate(innerloopvec[2:end])
 
     # innerloopvec = [("ls_maxiter"),(0),(500)] #,
     # legendstrs = map(innerloop->"$(innerloopvec[1][1])=$(innerloop[1]), ", innerloopvec[2:end])
@@ -328,19 +327,19 @@ for method = methods
     # legendstrs = map(innerloop->"$(innerloopvec[1][1])=$(innerloop[1]), $(innerloopvec[1][2])=$(innerloop[2])", innerloopvec[2:end])
     # title = ("whole_vs_column")
     # for (idx,(sd_group, reg)) = enumerate(innerloopvec[2:end])
-        scaparamstr = "_$(reg)_$(sd_group)_$(optimmethod)_$(maxiterstr)_lsit$(ls_maxiter)_b$(β)_l$(λ)"
-        λ1 = λ2 = λ; β1 = β2 = β
+        scaparamstr = "_$(reg)_$(sd_group)_$(optimmethod)_$(maxiterstr)_lsit$(ls_maxiter)_α$(α)_β$(β)_λ$(λ)"
+        β1 = β2 = β; α1 = α2 = α
         if method == :SCA
             Mw, Mh = copy(Mw0), copy(Mh0)
             stparams = StepParams(sd_group=sd_group, optimmethod=optimmethod, approx=true,
-                β1=β1, β2=β2, λ1=λ1, λ2=λ2, reg=reg, l1l2ratio=l1l2ratio, order=1, M2power=1,
-                useRelaxedL1=false, σ0=100*std(W0)^2, r=0.1, hfirst=true, processorder=:none,
-                poweradjust=:none, rectify=:none, objective=:normal)
+                α1=α1, α2=α2, β1=β1, β2=β2, λ=λ, reg=reg, l1l2ratio=l1l2ratio, order=1, M2power=M2power,
+                useRelaxedL1=true, σ0=100*std(W0)^2, r=0.1, hfirst=true, processorder=:none,
+                poweradjust=poweradjust, rectify=:none, objective=:normal)
             lsparams = LineSearchParams(method=ls_method, α0=1.0, c_1=1e-4, maxiter=ls_maxiter, show_lsplot=false,
                 iterations_to_show=[15])
             cparams = ConvergenceParams(allow_f_increases = true, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
-                x_abstol=tol, successive_f_converge=1, maxiter=scamaxiter, inner_maxiter=inner_maxiter, store_trace=true,
-                store_inner_trace=true, show_trace=true, show_inner_trace=false, plotiterrng=1:0, plotinneriterrng=1:5)
+                x_abstol=tol, successive_f_converge=1, maxiter=scamaxiter, inner_maxiter=inner_maxiter, store_trace=false,
+                store_inner_trace=false, show_trace=true, show_inner_trace=false, plotiterrng=1:0, plotinneriterrng=1:5)
             rt = @elapsed W1, H1, objvals, trs, nitersum, fxss, xdiffss, ngss = scasolve!(W0, H0, d, Mw, Mh; stparams=stparams,
                                                                             lsparams=lsparams, cparams=cparams);
             save_figure && begin
@@ -353,7 +352,7 @@ for method = methods
         elseif method == :OCA
             Mw, Mh = copy(Mw0), copy(Mh0)
             stparams = StepParams(sd_group=sd_group, optimmethod=:optim_lbfgs, approx=true,
-                    β1=β1, β2=0, λ1=λ1, λ2=0, reg=reg, l1l2ratio=l1l2ratio, order=1,
+                    α1=α1, α2=0, β1=β1, β2=0, reg=reg, l1l2ratio=l1l2ratio, order=1,
                     useRelaxedL1=true, σ0=100*std(W0)^2, r=0.1, objective=:normal)
             lsparams = LineSearchParams(method=ls_method, α0=1.0, maxiter=1000, show_lsplot=true,
                     iterations_to_show=[1])
@@ -413,7 +412,7 @@ close("all")
 
 ncells = 800
 rt1 = @elapsed W0, H0, Mw, Mh, Wp, Hp, d = initsemisca(X, ncells, initmethod=initmethod,
-poweradjust=initpwradj, initfn=initfn, β1=βs[1])
+poweradjust=initpwradj, initfn=initfn, α1=αs[1])
 initstr = "$(initmethod)"
 fprefix0 = "Init$(initdatastr)_$(initstr)_$(initpwradj)_rt"*@sprintf("%1.2f",rt1)
 Mw0, Mh0 = copy(Mw), copy(Mh)
@@ -421,7 +420,7 @@ W1,H1 = copy(W0*Mw), copy(Mh*H0); normalizeW!(W1,H1)
 imsaveW("SNR-20.png",W1,imgsz;gridcols=40)
 
 stparams = StepParams(sd_group=sd_group, optimmethod=optimmethod, approx=approx,
-β1=β1, β2=β2, λ1=λ1, λ2=λ2, reg=regularization, order=order, M2power=M2power,
+α1=α1, α2=α2, β1=β1, β2=β2, reg=regularization, order=order, M2power=M2power,
 useRelaxedL1=useRelaxedL1, σ0=100*std(W0)^2, r=0.1, hfirst=true, processorder=:none,
 poweradjust=pwradj, rectify=rectify, objective=objective)
 
@@ -429,13 +428,13 @@ D = Diagonal(d); fw=gh=Matrix(1.0I,0,0)
 normw2 = norm(W0)^2; normh2 = norm(H0)^2
 normwp = norm(W0,stparams.order)^stparams.order; normhp = norm(H0,stparams.order)^stparams.order
 sndpow = sqrt(norm(d))^stparams.M2power
-(λw, λh) = (stparams.λ1/normw2, stparams.λ2/normh2)
+(βw, βh) = (stparams.β1/normw2, stparams.β2/normh2)
 Msparse = stparams.poweradjust ∈ [:M1,:M2]
-(βw, βh) = Msparse ?                     (stparams.β1, stparams.β2) :
-           stparams.poweradjust==:W1M2 ? (stparams.β1/normwp/sndpow, stparams.β2/normhp/sndpow) :
-                                         (stparams.β1/normwp, stparams.β2/normhp)
+(αw, αh) = Msparse ?                     (stparams.α1, stparams.α2) :
+           stparams.poweradjust==:W1M2 ? (stparams.α1/normwp/sndpow, stparams.α2/normhp/sndpow) :
+                                         (stparams.α1/normwp, stparams.α2/normhp)
 
-SCA.penaltyMwMh(Mw,Mh,W0,H0,D,fw,gh,λw,λh,βw,βh,0,Msparse,stparams.order; reg=stparams.reg,
+SCA.penaltyMwMh(Mw,Mh,W0,H0,D,fw,gh,βw,βh,αw,αh,0,Msparse,stparams.order; reg=stparams.reg,
                 M2power=stparams.M2power, objective=stparams.objective, useRelaxedL1=stparams.useRelaxedL1)
 
 
