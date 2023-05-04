@@ -106,14 +106,14 @@ function load_urban()
 end
 
 function load_fakecells(;SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, bias=0.1, useCalciumT=false,
-        jitter=0, only2cells=false, save_maxSNR_X=false, save_X=false, save_gtimg=false)
+        jitter=0, inhibitidx=0, only2cells=false, save_maxSNR_X=false, save_X=false, save_gtimg=false)
     dirpath = joinpath(datapath,"fakecells")
     calciumstr = useCalciumT ? "_calcium" : ""
-    fprefix = "fakecells$(calciumstr)_sz$(imgsz)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR)_bias$(bias)"
+    fprefix = "fakecells$(inhibitidx)$(calciumstr)_sz$(imgsz)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR)_bias$(bias)"
     dfprefix = joinpath(dirpath,fprefix)
     X, imgsz, fakecells_dic, img_nl, maxSNR_X = loadfakecell(Float64, dfprefix*".jld", only2cells=only2cells,
         fovsz=imgsz, imgsz=imgsz, lengthT=lengthT, bias=bias, useCalciumT=useCalciumT, jitter=jitter, SNR=SNR,
-        save=true);
+        inhibitidx=inhibitidx, save=true);
     gtncells = fakecells_dic["gt_ncells"]
     if save_gtimg
         gtW = fakecells_dic["gtW"]; gtH = fakecells_dic["gtH"]
@@ -135,7 +135,7 @@ function load_fakecells(;SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, bia
 end
 
 function load_data(dataset; SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, useCalciumT=false,
-        jitter=0, bias=0.1, save_maxSNR_X=false, save_X=false, save_gtimg=false)
+        jitter=0, bias=0.1, inhibitidx=0, save_maxSNR_X=false, save_X=false, save_gtimg=false)
     if dataset == :cbclface
         println("loading CBCL face dataset")
         load_cbcl()
@@ -157,8 +157,8 @@ function load_data(dataset; SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, 
     elseif dataset == :fakecells
         println("loading fakecells")
         load_fakecells(only2cells=false, SNR=SNR, user_ncells=user_ncells, imgsz=imgsz, lengthT=lengthT,
-            bias=bias, useCalciumT=useCalciumT, jitter=jitter, save_maxSNR_X=save_maxSNR_X, save_X = save_X,
-            save_gtimg=save_gtimg)
+            bias=bias, useCalciumT=useCalciumT, jitter=jitter, inhibitidx=inhibitidx,
+            save_maxSNR_X=save_maxSNR_X, save_X = save_X, save_gtimg=save_gtimg)
     elseif dataset == :fakecellsmall
         println("loading fakecells with only two cells")
         load_fakecells(only2cells=true, SNR=SNR, user_ncells=6, imgsz=(20,30), lengthT=lengthT, bias=bias,
@@ -294,8 +294,8 @@ function imsave_fakecell(fprefix,W,H,imgsz,tlength; mssdwstr="", mssdhstr="",
     saveH && imsaveH(fprefix*"_H$(mssdhstr).png", H, tlength; colors=signedcolors)
 end
 
-function imsave_data_gt(dataset,fprefix,W,H,gtW,gtH,imgsz,lengthT; saveH=true)
-    mssd, ml, ssds = matchednssd(gtW,W); mssdH = ssdH(ml, gtH,H')
+function match_order_to_gt(W,H,gtW,gtH)
+    mssd, ml, ssds = matchednssda(gtW,W); mssdH = ssdH(ml, gtH,H')
     neworder = zeros(Int,length(ml))
     for (gti, i) in ml
         neworder[gti]=i
@@ -303,9 +303,13 @@ function imsave_data_gt(dataset,fprefix,W,H,gtW,gtH,imgsz,lengthT; saveH=true)
     for i in 1:ncells
         i ∉ neworder && push!(neworder,i)
     end
-    Wno, Hno = copy(W[:,neworder]), copy(H[neworder,:])
+    copy(W[:,neworder]), copy(H[neworder,:]), mssd, mssdH
+end
+
+function imsave_data_gt(dataset,fprefix,W,H,gtW,gtH,imgsz,lengthT; signedcolors=g1wm(), saveH=true)
+    Wno, Hno, mssd, mssdH = match_order_to_gt(W,H,gtW,gtH)
     imsave_data(dataset,fprefix,Wno,Hno,imgsz,lengthT; mssdwstr="_MSE"*@sprintf("%1.4f",mssd),
-            mssdhstr="_MSE"*@sprintf("%1.4f",mssdH), saveH=saveH)
+            mssdhstr="_MSE"*@sprintf("%1.4f",mssdH), signedcolors=signedcolors, saveH=saveH)
 end
 #=========== Plot Convergence ====================================================#
 function plot_convergence(fprefix, x_abss, xw_abss, xh_abss, f_xs; title="")

@@ -1,3 +1,4 @@
 #!/bin/bash
-# julia         file                     dataset, SNRs, maxiter, λs, βs, method, nclsrng, objective, reg, usingSCAinit, sd_group, ls_method
-julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:fakecell] [60] 300 [0] [0.1,0.5,1,5] :ntoca [15] :normal :W1 false :whole :none
+# julia         file              dataset,   SNRs, initmethod, maxiter, αs, βs, optimmethod,   reg, sd_group, useRelaxedL1
+julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:fakecells] [0] :oca 500 [100] [0] :optim_lbfgs :W1M2 :column true
+julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:fakecells] [0] :oca 500 [100] [0] :optim_lbfgs :W1M2 :component true
