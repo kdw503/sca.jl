@@ -60,15 +60,15 @@ plotW(dcdnocm10["nclsrng"], [dcdnocm10["mssds"] dcdnoc40["mssds"]], "NOC_vs_MSSD
 # Runtime
 ylbl="Time (sec)"
 # SNR vs runtime
-plowW(dscasnr["SNRs"], [dscasnr["rt1s"]+dscasnr["rt2s"] dcdsnr["rt1s"]+dcdsnr["rt2s"]], "SNR_vs_rt.png";
+plotW(dscasnr["SNRs"], [dscasnr["rt1s"]+dscasnr["rt2s"] dcdsnr["rt1s"]+dcdsnr["rt2s"]], "SNR_vs_rt.png";
     title="SNR vs Runtime", xlbl="SNR", ylbl=ylbl, legendloc=2, arrange=:combine,
     legendstrs = legendstrs)
 # NOC vs MSSD (-10dB)
-plowW(dscanocm10["nclsrng"], [dscanocm10["rt1s"]+dscanocm10["rt2s"] dcdnocm10["rt1s"]+dcdnocm10["rt2s"]], "NOC_vs_rt_-10dB.png";
+plotW(dscanocm10["nclsrng"], [dscanocm10["rt1s"]+dscanocm10["rt2s"] dcdnocm10["rt1s"]+dcdnocm10["rt2s"]], "NOC_vs_rt_-10dB.png";
     title="NOC vs Runtime (-10dB)", xlbl="NOC", ylbl=ylbl, legendloc=2, arrange=:combine,
     legendstrs = legendstrs)
 # NOC vs MSSD (40dB)
-plowW(dscanoc40["nclsrng"], [dscanoc40["rt1s"]+dscanoc40["rt2s"] dcdnoc40["rt1s"]+dcdnoc40["rt2s"]], "NOC_vs_rt_40dB.png";
+plotW(dscanoc40["nclsrng"], [dscanoc40["rt1s"]+dscanoc40["rt2s"] dcdnoc40["rt1s"]+dcdnoc40["rt2s"]], "NOC_vs_rt_40dB.png";
     title="NOC vs Runtime (40dB)", xlbl="NOC", ylbl=ylbl, legendloc=2, arrange=:combine,
     legendstrs = legendstrs)
 
