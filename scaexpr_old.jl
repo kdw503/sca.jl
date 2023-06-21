@@ -20,81 +20,41 @@ plt.ioff()
 
 # @sk_import decomposition: SparsePCA
 
-dataset = :fakecells; SNR=0; inhibitidx=0; bias=0.1
-initmethod=:isvd; initpwradj=:wh_normalize
-useFilter = dataset ∈ [:neurofinder,:fakecells] ? true : false
-filter=:meanT # :medT, :medS
-filterstr = useFilter ? "_$(filter)" : ""
+dataset = :fakecells; SNR=0; inhibitidx=0; bias=0.1; initmethod=:isvd; initpwradj=:wh_normalize
+filter = dataset ∈ [:neurofinder,:fakecells] ? :meanT : :none; filterstr = "_$(filter)"
 datastr = dataset == :fakecells ? "_fc$(inhibitidx)_$(SNR)dB" : "_$(dataset)"
-save_figure = true; makepositive = true
-
-X, imgsz, lengthT, ncells0, gtncells, datadic = load_data(dataset; SNR=SNR, bias=bias, useCalciumT=true,
-        inhibitidx=inhibitidx, save_gtimg=true, save_maxSNR_X=false, save_X=false);
 subtract_bg=false
-ncells = ncells0
-dataset == :fakecells && (gtW = datadic["gtW"]; gtH = datadic["gtH"])
 
-# XmedT = mapwindow(median!, X, (1,3)) # just for each row
-# XmeanT = mapwindow(mean, X, (1,3)) # just for each row
-# rsimg = reshape(X,imgsz...,lengthT)
-# rsimgm = mapwindow(median!, rsimg, (3,3,1))
-# XmedS = reshape(rsimgm,*(imgsz...),lengthT)
-# X = vcat(X,XmedT,XmeanT,XmedS)
-# options = (crf=23, preset="medium")
-# clamp_level=1.0; X_max = maximum(abs,X)*clamp_level; Xnor = X./X_max;  X_clamped = clamp.(Xnor,0.,1.)
-# Xuint8 = UInt8.(round.(map(clamp01nan, X_clamped)*255))
-# VideoIO.save("$(datastr)_$(SNR)dB_allprepro_original_medT_meanT_medS.mp4", reshape.(eachcol(Xuint8),imgsz[1],4*imgsz[2]), framerate=30, encoder_options=options)
+X, imgsz, lengthT, ncells, gtncells, datadic = load_data(dataset; SNR=SNR, bias=bias, useCalciumT=true,
+        inhibitidx=inhibitidx, save_gtimg=true, save_maxSNR_X=false, save_X=false);
 
-if useFilter
-    if filter == :medT
-        X = mapwindow(median!, X, (1,3)) # just for each row
-    end
-    if filter == :meanT
-        X = mapwindow(mean, X, (1,3)) # just for each row
-    end
-    if filter == :medS
-        rsimg = reshape(X,imgsz...,lengthT)
-        rsimgm = mapwindow(median!, rsimg, (3,3,1))
-        X = reshape(rsimgm,*(imgsz...),lengthT)
-    end
-end
-close("all")
-plot(gtH)
-savefig("gtH.png")
+(m,n,p) = (size(X)...,ncells); dataset == :fakecells && (gtW = datadic["gtW"]; gtH = datadic["gtH"])
+X = noisefilter(filter,X)
+save_gtH = false; save_gtH && (close("all"); plot(gtH); savefig("gtH.png"))
+
 if subtract_bg
     rt1cd = @elapsed Wcd, Hcd = NMF.nndsvd(X, 1, variant=:ar) # rank 1 NMF
-    rt = @elapsed result = NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=59, α=0, l₁ratio=0.5,
-                                        tol=1e-7), X, Wcd, Hcd)
-    normalizeW!(Wcd,Hcd)
-    imsave_data(dataset,"Wr1",Wcd,Hcd,imgsz,100; signedcolors=dgwm(), saveH=false)
-    close("all")
-    plot(Hcd')
-    savefig("Hr1.png")
-    plot(gtH[:,inhibitidx])
-    savefig("Hr1_gtH.png")
-    bg = Wcd*fill(mean(Hcd),1,1000)
-    X .-= bg
+    NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=60, α=0), X, Wcd, Hcd)
+    normalizeW!(Wcd,Hcd); imsave_data(dataset,"Wr1",Wcd,Hcd,imgsz,100; signedcolors=dgwm(), saveH=false)
+    close("all"); plot(Hcd'); savefig("Hr1.png"); plot(gtH[:,inhibitidx]); savefig("Hr1_gtH.png")
+    bg = Wcd*fill(mean(Hcd),1,n); X .-= bg
 end
-rt1 = @elapsed W0, H0, Mw, Mh, Wp, Hp, d = initsemisca(X, ncells, initmethod=initmethod,poweradjust=initpwradj)
-Mw0, Mh0 = copy(Mw), copy(Mh)
-rt1cd = @elapsed Wcd, Hcd = NMF.nndsvd(X, ncells, variant=:ar)
-Wcd0, Hcd0 = copy(Wcd), copy(Hcd)
-save_figure && begin
+rt1sca = @elapsed W0, H0, Mw0, Mh0, Wp, Hp, d = initsemisca(X, ncells, initmethod=initmethod,poweradjust=initpwradj)
+rt1cd = @elapsed Wcd0, Hcd0 = NMF.nndsvd(X, ncells, variant=:ar)
+save_init_figure = false; save_init_figure && begin
     normalizeW!(Wp,Hp); W2,H2 = sortWHslices(Wp,Hp)
-    imsave_data(dataset,"$(initmethod)$(datastr)$(filterstr)_rti$(rt1)",W2,H2,imgsz,100; signedcolors=dgwm(), saveH=false)
+    imsave_data(dataset,"$(initmethod)$(datastr)$(filterstr)_rti$(rt1sca)",W2,H2,imgsz,100; signedcolors=dgwm(), saveH=false)
 end
 
-method = :SCA; initmethod = :isvd; penmetric = :SCA
-sd_group=:whole; reg = :WH1; M2power=1; l1l2ratio = 0.1
-useRelaxedL1=true
-s=10; σ0=s*std(W0) #10*std(W0)
+method = :SCA; initmethod = :isvd; penmetric = :SCA; sd_group=:whole; reg = :WH1; α = 100; β = 0
+useRelaxedL1=true; s=10; σ0=s*std(W0) #=10*std(W0)=#
 r=0.3 #0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
       # if this is too big iteration number would be increased
-α = 100; β = 0; λ = 0.1
-tol=1e-6; uselogscale=true; save_figure=true; optimmethod = :optim_lbfgs
-ls_method = :ls_BackTracking
-maxiter=60; scamaxiter = maxiter; halsmaxiter = 4*maxiter; inner_maxiter = 50; ls_maxiter = 500
-isplotxandg = false; plotnum = isplotxandg ? 3 : 1
+# Optimization parameters
+tol=1e-6; optimmethod = :optim_lbfgs; ls_method = :ls_BackTracking
+maxiter=50; scamaxiter = 50; halsmaxiter = 50; spcamaxiter=maxiter; inner_maxiter = 50; ls_maxiter = 50
+# Result demonstration parameters
+makepositive = true; save_figure = true; uselogscale=true; isplotxandg = false; plotnum = isplotxandg ? 3 : 1
 
 penaltystr = uselogscale ? "log10(penalty)" : "penalty"
 if isplotxandg
@@ -145,14 +105,12 @@ for (idx,(method, sd_group, reg, maxiter, α, penmetric)) = enumerate(paramsvec[
     Wcd0, Hcd0 = copy(Wcd), copy(Hcd)
     optimmethodstr = (optimmethod ∈ [:SB_newton, :SB_lbfgs, :SB_cg] || !useRelaxedL1) ? "$optimmethod" : "$(optimmethod)_σ$(s)r$(r)"
     β1 = β2 = β; α1 = α; α2 = α; # α2 = 0
-    scaparamstr = "_$(reg)_$(sd_group)_$(optimmethodstr)_$(maxiterstr)_init$(inner_maxiter)_αw$(α1)_αh$(α2)_β$(β)_λ$(λ)"
+    scaparamstr = "_$(reg)_$(sd_group)_$(optimmethodstr)_$(maxiterstr)_init$(inner_maxiter)_αw$(α1)_αh$(α2)_β$(β)"
     if method == :SCA
         Mw, Mh = copy(Mw0), copy(Mh0)
-        stparams = StepParams(sd_group=sd_group, optimmethod=optimmethod, approx=true, α1=α1, α2=α2,
-            β1=β1, β2=β2, λ=λ, reg=reg, l1l2ratio=l1l2ratio, M2power=M2power, useRelaxedL1=useRelaxedL1,
-            σ0=σ0, r=r, hfirst=true, processorder=:none, poweradjust=poweradjust, useprecond=true)
-        lsparams = LineSearchParams(method=ls_method, α0=1.0, c_1=1e-4, maxiter=ls_maxiter, show_lsplot=false,
-            iterations_to_show=[15])
+        stparams = StepParams(sd_group=sd_group, optimmethod=optimmethod, approx=true, α1=α1, α2=α2, β1=β1, β2=β2,
+            reg=reg, useRelaxedL1=useRelaxedL1, σ0=σ0, r=r, poweradjust=poweradjust, useprecond=true)
+        lsparams = LineSearchParams(method=ls_method, α0=1.0, c_1=1e-4, maxiter=ls_maxiter)
         cparams = ConvergenceParams(allow_f_increases = true, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
             x_abstol=tol, successive_f_converge=1, maxiter=scamaxiter, inner_maxiter=inner_maxiter, store_trace=true,
             store_inner_trace=false, show_trace=true, show_inner_trace=false, plotiterrng=1:0, plotinneriterrng=1:5)
@@ -649,7 +607,7 @@ for method = mtds
         rt1cd = @elapsed Wcd, Hcd = NMF.nndsvd(X, ncells, variant=:ar)
         Wcd0, Hcd0 = copy(Wcd), copy(Hcd)
 
-        scaparamstr = "_$(reg)_$(sd_group)_$(optimmethod)_$(maxiterstr)_lsit$(ls_maxiter)_α$(α)_β$(β)_λ$(λ)"
+        scaparamstr = "_$(reg)_$(sd_group)_$(optimmethod)_$(maxiterstr)_lsit$(ls_maxiter)_α$(α)_β$(β)"
         β1 = β2 = β; α1 = α2 = α
         if method == :SCA
             Mw, Mh = copy(Mw0), copy(Mh0)
@@ -951,4 +909,41 @@ function Eialpha_coeffs(SwSh,SwMh,MwSh,x,step,MwMhmD,p)
     Mh = reshape(x[p^2+1:2p^2],p,p);  Sh = reshape(step[p^2+1:2p^2],p,p)
     mul!(SwSh,Sw,Sh); mul!(SwMh,Sw,Mh); mul!(MwSh,Mw,Sh); SwMhmMwSh = SwMh-MwSh
     sum(abs2,SwSh), 2sum(SwSh.*SwMhmMwSh), 2sum(SwSh.*MwMhmD)+sum(abs2,SwMhmMwSh), 2sum(SwMhmMwSh*MwMhmD), sum(abs2,MwMhmD)
+end
+
+mutable struct RepeatedView{T}<:AbstractVector
+    sv::SubArray{T,1}
+    repeat::Int
+end
+function repeated_view(v::AbstracVector{T}, indices, repeat) where T
+   return RepeatedView{T}(SubArray(v, indices),repeat)
+end
+function Base.getindex(A::RepeatedView, inds...)
+    length(inds)>1 && error("only indexing for Vector is supported")
+    ind = inds[1]%
+    checkbounds(A, )  # Check if indices are within bounds
+    linear_index = linearize(indices, strides(A))
+    return A[linear_index]
+end
+
+# Custom preconditioning
+mutable struct RepeatedDiagonal
+    diagw
+    diagh
+end
+ 
+function ldiv!(pgr, P::RepeatedDiagonal, gr)
+    p=length(gr)
+    idxw(i)=(i-1)*p+1:i*p
+    foreach(i -> copy!(pgr[idxw(i)], gr[idxw(i)]./P.diagw), 1:p)
+    idxh(i)=(i-1)*p+1+p^2:i*p+p^2
+    foreach(i -> copy!(pgr[idxh(i)], gr[idxh(i)]./P.diagh), 1:p)
+end 
+function LinearAlgebra.dot(x, P, y)
+    p=length(y); s=zero(eltype(x))
+    idxw(i)=(i-1)*p+1:i*p
+    foreach(i -> s += dot(x[idx], y[idx]./P.diagw), 1:p)
+    idxh(i)=(i-1)*p+1+p^2:i*p+p^2
+    foreach(i -> s += dot(x[idx], y[idx]./P.diagh), 1:p)
+    s
 end

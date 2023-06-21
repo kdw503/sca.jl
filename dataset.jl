@@ -106,14 +106,15 @@ function load_urban()
 end
 
 function load_fakecells(;SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, bias=0.1, useCalciumT=false,
-        jitter=0, inhibitidx=0, only2cells=false, save_maxSNR_X=false, save_X=false, save_gtimg=false)
+        jitter=0, inhibitidx=0, gtincludebg=false, only2cells=false, issave=true, isload=true, save_maxSNR_X=false,
+        save_X=false, save_gtimg=false)
     dirpath = joinpath(datapath,"fakecells")
     calciumstr = useCalciumT ? "_calcium" : ""
     fprefix = "fakecells$(inhibitidx)$(calciumstr)_sz$(imgsz)_lengthT$(lengthT)_J$(jitter)_SNR$(SNR)_bias$(bias)"
     dfprefix = joinpath(dirpath,fprefix)
     X, imgsz, fakecells_dic, img_nl, maxSNR_X = loadfakecell(Float64, dfprefix*".jld", only2cells=only2cells,
         fovsz=imgsz, imgsz=imgsz, lengthT=lengthT, bias=bias, useCalciumT=useCalciumT, jitter=jitter, SNR=SNR,
-        inhibitidx=inhibitidx, save=true);
+        inhibitidx=inhibitidx, gtincludebg=gtincludebg, issave=issave, isload=isload);
     gtncells = fakecells_dic["gt_ncells"]
     if save_gtimg
         gtW = fakecells_dic["gtW"]; gtH = fakecells_dic["gtH"]
@@ -135,7 +136,8 @@ function load_fakecells(;SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, bia
 end
 
 function load_data(dataset; SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, useCalciumT=false,
-        jitter=0, bias=0.1, inhibitidx=0, save_maxSNR_X=false, save_X=false, save_gtimg=false)
+        jitter=0, bias=0.1, inhibitidx=0, gtincludebg=false, issave=true, isload=true, save_maxSNR_X=false,
+        save_X=false, save_gtimg=false)
     if dataset == :cbclface
         println("loading CBCL face dataset")
         load_cbcl()
@@ -157,12 +159,13 @@ function load_data(dataset; SNR=10, user_ncells=0, imgsz=(40,20), lengthT=1000, 
     elseif dataset == :fakecells
         println("loading fakecells")
         load_fakecells(only2cells=false, SNR=SNR, user_ncells=user_ncells, imgsz=imgsz, lengthT=lengthT,
-            bias=bias, useCalciumT=useCalciumT, jitter=jitter, inhibitidx=inhibitidx,
-            save_maxSNR_X=save_maxSNR_X, save_X = save_X, save_gtimg=save_gtimg)
+            bias=bias, useCalciumT=useCalciumT, jitter=jitter, inhibitidx=inhibitidx, gtincludebg=gtincludebg,
+            issave=issave, isload=isload, save_maxSNR_X=save_maxSNR_X, save_X = save_X, save_gtimg=save_gtimg)
     elseif dataset == :fakecellsmall
         println("loading fakecells with only two cells")
         load_fakecells(only2cells=true, SNR=SNR, user_ncells=6, imgsz=(20,30), lengthT=lengthT, bias=bias,
-            useCalciumT=useCalciumT,jitter=jitter, save_maxSNR_X=save_maxSNR_X, save_gtimg=save_gtimg)
+            gtincludebg=gtincludebg, issave=issave, isload=isload, useCalciumT=useCalciumT,jitter=jitter,
+            save_maxSNR_X=save_maxSNR_X, save_gtimg=save_gtimg)
     else
         error("Not supported dataset")
     end
