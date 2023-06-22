@@ -14,34 +14,30 @@ include(joinpath(scapath,"test","testutils.jl"))
 include("dataset.jl")
 include("utils.jl")
 
-using ProfileView, BenchmarkTools
-
 dataset = :fakecells; SNR=0; inhibitidx=0; bias=0.1; initmethod=:lowrank; initpwradj=:wh_normalize
 filter = dataset ∈ [:neurofinder,:fakecells] ? :meanT : :none; filterstr = "_$(filter)"
 datastr = dataset == :fakecells ? "_fc$(inhibitidx)_$(SNR)dB" : "_$(dataset)"
 subtract_bg=false
 
-# testdic = Dict()
-# A=rand(40,20,1000); img_nl = AxisArray(colorview(Gray, A), :y, :x, :time)
-# gtW = rand(40,20,7); gtH = rand(1000,7)
-
-# testdic["gt_ncells"] = 7
-# testdic["imgrs"] = Matrix(reshape(img_nl,800,1000))
-# testdic["img_nl"] = img_nl
-# testdic["gtW"] = gtW
-# testdic["gtH"] = gtH
-# JLD.save("C:\\Users\\kdw76\\WUSTL\\Work\\Data\\fakecells\\fakecells0_calcium_sz(40, 20)_lengthT1000_J0_SNR0_bias0.1.jld",testdic)
-# JLD.load("C:\\Users\\kdw76\\WUSTL\\Work\\Data\\fakecells\\fakecells0_calcium_sz(40, 20)_lengthT1000_J0_SNR0_bias0.1.jld")
-
-data_sca_nn = Dict[]; data_sca_sp = Dict[]; data_sca_sp_nn = Dict[]
-num_experiments = 30
+if true
+    num_experiments = 100
+    sca_maxiter = 400; sca_inner_maxiter = 50; sca_ls_maxiter = 100
+    admm_maxiter = 1500; admm_inner_maxiter = 0; admm_ls_maxiter = 0
+    hals_maxiter = 200
+else
+    num_experiments = 2
+    sca_maxiter = 2; sca_inner_maxiter = 2; sca_ls_maxiter = 2
+    admm_maxiter = 2; admm_inner_maxiter = 0; admm_ls_maxiter = 0
+    hals_maxiter = 2
+end
 
 for iter in 1:num_experiments
-    @show iter
+    @show iter; flush(stdout)
 X, imgsz, lengthT, ncells, gtncells, datadic = load_data(dataset; SNR=SNR, bias=bias, useCalciumT=true,
         inhibitidx=inhibitidx, issave=false, isload=false, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
 
-(m,n,p) = (size(X)...,ncells); dataset == :fakecells && (gtW = datadic["gtW"]; gtH = datadic["gtH"])
+(m,n,p) = (size(X)...,ncells)
+gtW, gtH = dataset == :fakecells ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
 X = noisefilter(filter,X)
 
 if subtract_bg
@@ -53,21 +49,22 @@ if subtract_bg
 end
 
 # SCA
+@show "SCA"
 mfmethod = :SCA; penmetric = :SCA; sd_group=:whole; reg = :WH1; α = 100; β = 1000
-useRelaxedL1=true; useRelaxedNN=true; s=10*0.3^0; σ0=s*std(W0) #=10*std(W0)=#
+useRelaxedL1=true; useRelaxedNN=true; s=10*0.3^0; 
 r=(0.3)^1 #0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
       # if this is too big iteration number would be increased
 # Optimization parameters
 tol=-1; optimmethod = :optim_lbfgs; ls_method = :ls_BackTracking; useprecond=true; uselv=false
-maxiter=100; inner_maxiter = 50; ls_maxiter = 100
+maxiter = sca_maxiter; inner_maxiter = sca_inner_maxiter; ls_maxiter = sca_ls_maxiter
 # Result demonstration parameters
 makepositive = true; poweradjust = :none
 
 for (tailstr,initmethod,α,β) in [("_nn",:nndsvd,0.,1000.), ("_sp",:isvd,100.,0.), ("_sp_nn",:nndsvd,100.,1000.)]
-    @show tailstr
+    @show tailstr; flush(stdout)
     dd = Dict()
     rt1 = @elapsed W0, H0, Mw0, Mh0, Wp, Hp, D = initsemisca(X, ncells, initmethod=initmethod,poweradjust=initpwradj)
-
+    σ0=s*std(W0) #=10*std(W0)=#
     α1=α2=α; β1=β2=β
     avgfits=Float64[]; rt2s=Float64[]; inner_fxs=Float64[]
     stparams = StepParams(sd_group=sd_group, optimmethod=optimmethod, approx=true, α1=α1, α2=α2, β1=β1, β2=β2,
@@ -78,54 +75,36 @@ for (tailstr,initmethod,α,β) in [("_nn",:nndsvd,0.,1000.), ("_sp",:isvd,100.,0
         x_abstol=tol, successive_f_converge=0, maxiter=maxiter, inner_maxiter=inner_maxiter, store_trace=true,
         store_inner_trace=true, show_trace=false, show_inner_trace=false, plotiterrng=1:0, plotinneriterrng=499:500)
     Mw, Mh = copy(Mw0), copy(Mh0);
-    rt2 = @elapsed W1, H1, objvals, laps, trs, niters = scasolve!(X, W0, H0, D, Mw, Mh, Wp, Hp; penmetric=penmetric,
-                                            stparams=stparams, lsparams=lsparams, cparams=cparams);
+    rt2 = @elapsed W1, H1, objvals, laps, trs, niters = scasolve!(X, W0, H0, D, Mw, Mh, Wp, Hp; gtW=gtW, gtH=gtH,
+                                    penmetric=penmetric, stparams=stparams, lsparams=lsparams, cparams=cparams);
     Mw, Mh = copy(Mw0), copy(Mh0);
     cparams.store_trace = false; cparams.store_inner_trace = false;
     cparams.show_trace=false; cparams.show_inner_trace=false; cparams.plotiterrng=1:0
-    rt2 = @elapsed W1, H1, objvals, laps, _ = scasolve!(X, W0, H0, D, Mw, Mh, Wp, Hp; penmetric=penmetric,
-                                            stparams=stparams, lsparams=lsparams, cparams=cparams);
-    normalizeW!(W1,H1); W3,H3 = sortWHslices(W1,H1)
-    makepositive && flip2makepos!(W3,H3)
+    rt2 = @elapsed W1, H1, objvals, laps, trs, _ = scasolve!(X, W0, H0, D, Mw, Mh, Wp, Hp; gtW=gtW, gtH=gtH,
+                                     penmetric=penmetric, stparams=stparams, lsparams=lsparams, cparams=cparams);
     f_xs = getdata(trs,:f_x); niters = getdata(trs,:niter); totalniters = sum(niters)
-    Mwss = getdata(trs,:Mws); Mhss = getdata(trs,:Mhs); fxss = getdata(trs,:fxs)
-    Mwsall = []; Mhsall = []; fxsall = Float64[]; rt2sall = Float64[]
-    for (iter,(Mwsi,Mhsi,fxsi)) in enumerate(zip(Mwss,Mhss, fxss))
-        isempty(Mwsi) && continue
-        for (inner_iter,(Mw, Mh, fx)) in enumerate(zip(Mwsi,Mhsi,fxsi))
-            push!(Mwsall,Mw); push!(Mhsall,Mh); push!(fxall,fx)
-        end
+    avgfitss = getdata(trs,:avgfits); fxss = getdata(trs,:fxs)
+    avgfits = Float64[]; inner_fxs = Float64[]; rt2s = Float64[]
+    for (iter,(afs,fxs)) in enumerate(zip(avgfitss, fxss))
+        isempty(afs) && continue
+        append!(avgfits,afs); append!(inner_fxs,fxs)
         if iter == 1
-            rt2 = 0.
+            rt2i = 0.
         else
-            rt2 = collect(range(start=laps[iter-1],stop=laps[iter],length=length(Mwsi)+1))[2:end].-laps[1]
+            rt2i = collect(range(start=laps[iter-1],stop=laps[iter],length=length(fxs)+1))[2:end].-laps[1]
         end
-        append!(rt2sall,rt2)
+        append!(rt2s,rt2i)
     end
-    @show length(rt2sall)
-    for (i,(Mw,Ms,fx,rt2)) in enumerate(zip(Mwsall,Mhsall,fxall,rt2sall))
-        i%2 != 1 && continue
-        @show i
-        W3=W0*Mw; H3 = Mh*H0
-        normalizeW!(W3,H3)
-        avgfit, ml, merrval, rerrs = matchedfitval(gtW, gtH, W3, H3; clamp=false)
-#            avgfit = fitdold(X,W3*H3)
-        push!(avgfits,avgfit); push!(inner_fxs,fx); push!(rt2s,rt2)
-    end
+    @show length(rt2s); flush(stdout)
 
     dd["niters"] = niters; dd["totalniters"] = totalniters; dd["rt1"] = rt1; dd["rt2s"] = rt2s
-    dd["avgfits"]=avgfits; dd["f_xs"] = f_xs; dd["inner_fxs"] = inner_fxs
-    tailstr == "_nn" && push!(data_sca_nn, dd)
-    tailstr == "_sp" && push!(data_sca_sp, dd)
-    tailstr == "_sp_nn" && push!(data_sca_sp_nn, dd)
-    if iter == num_experiments
+    dd["avgfits"] = avgfits; dd["f_xs"] = f_xs; dd["inner_fxs"] = inner_fxs
+    if true#iter == num_experiments
         metadata = Dict()
         metadata["alpha0"] = σ0; metadata["r"] = r; metadata["maxiter"] = maxiter; metadata["inner_maxiter"] = inner_maxiter;
-        metadata["alpha"] = σ; metadata["beta"] = β; metadata["optimmethod"] = optimmethod; metadata["initmethod"] = initmethod
-        tailstr == "_nn" && push!(data_sca_nn, metadata)
-        tailstr == "_sp" && push!(data_sca_sp, metadata)
-        tailstr == "_sp_nn" && push!(data_sca_sp_nn, metadata)
+        metadata["alpha"] = α; metadata["beta"] = β; metadata["optimmethod"] = optimmethod; metadata["initmethod"] = initmethod
     end
+    save("sca$(tailstr)_results$(iter).jld","metadata",metadata,"data",dd)
 end
+
 end
-save("sca_results.jld","data_sca_nn",data_sca_nn,"data_sca_sp",data_sca_sp,"data_sca_sp_nn",data_sca_sp_nn)

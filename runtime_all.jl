@@ -48,6 +48,65 @@ if subtract_bg
     bg = Wcd*fill(mean(Hcd),1,n); X .-= bg
 end
 
+# SCA
+@show "SCA"
+mfmethod = :SCA; penmetric = :SCA; sd_group=:whole; reg = :WH1; α = 100; β = 1000
+useRelaxedL1=true; useRelaxedNN=true; s=10*0.3^0; 
+r=(0.3)^1 #0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
+      # if this is too big iteration number would be increased
+# Optimization parameters
+tol=-1; optimmethod = :optim_lbfgs; ls_method = :ls_BackTracking; useprecond=true; uselv=false
+maxiter = sca_maxiter; inner_maxiter = sca_inner_maxiter; ls_maxiter = sca_ls_maxiter
+# Result demonstration parameters
+makepositive = true; poweradjust = :none
+
+for (tailstr,initmethod,α,β) in [("_nn",:nndsvd,0.,1000.), ("_sp",:isvd,100.,0.), ("_sp_nn",:nndsvd,100.,1000.)]
+    @show tailstr; flush(stdout)
+    dd = Dict()
+    rt1 = @elapsed W0, H0, Mw0, Mh0, Wp, Hp, D = initsemisca(X, ncells, initmethod=initmethod,poweradjust=initpwradj)
+    σ0=s*std(W0) #=10*std(W0)=#
+    α1=α2=α; β1=β2=β
+    avgfits=Float64[]; rt2s=Float64[]; inner_fxs=Float64[]
+    stparams = StepParams(sd_group=sd_group, optimmethod=optimmethod, approx=true, α1=α1, α2=α2, β1=β1, β2=β2,
+        reg=reg, useRelaxedL1=useRelaxedL1, useRelaxedNN=useRelaxedNN, σ0=σ0, r=r, poweradjust=poweradjust,
+        useprecond=useprecond, uselv=uselv)
+    lsparams = LineSearchParams(method=ls_method, α0=1.0, c_1=1e-4, maxiter=ls_maxiter)
+    cparams = ConvergenceParams(allow_f_increases = true, f_abstol = tol, f_reltol=tol, f_inctol=1e2,
+        x_abstol=tol, successive_f_converge=0, maxiter=maxiter, inner_maxiter=inner_maxiter, store_trace=true,
+        store_inner_trace=true, show_trace=false, show_inner_trace=false, plotiterrng=1:0, plotinneriterrng=499:500)
+    Mw, Mh = copy(Mw0), copy(Mh0);
+    rt2 = @elapsed W1, H1, objvals, laps, trs, niters = scasolve!(X, W0, H0, D, Mw, Mh, Wp, Hp; gtW=gtW, gtH=gtH,
+                                    penmetric=penmetric, stparams=stparams, lsparams=lsparams, cparams=cparams);
+    Mw, Mh = copy(Mw0), copy(Mh0);
+    cparams.store_trace = false; cparams.store_inner_trace = false;
+    cparams.show_trace=false; cparams.show_inner_trace=false; cparams.plotiterrng=1:0
+    rt2 = @elapsed W1, H1, objvals, laps, _ = scasolve!(X, W0, H0, D, Mw, Mh, Wp, Hp; gtW=gtW, gtH=gtH,
+                                     penmetric=penmetric, stparams=stparams, lsparams=lsparams, cparams=cparams);
+    f_xs = getdata(trs,:f_x); niters = getdata(trs,:niter); totalniters = sum(niters)
+    avgfitss = getdata(trs,:avgfits); fxss = getdata(trs,:fxs)
+    avgfits = Float64[]; inner_fxs = Float64[]; rt2s = Float64[]
+    for (iter,(afs,fxs)) in enumerate(zip(avgfitss, fxss))
+        isempty(afs) && continue
+        append!(avgfits,afs); append!(inner_fxs,fxs)
+        if iter == 1
+            rt2i = 0.
+        else
+            rt2i = collect(range(start=laps[iter-1],stop=laps[iter],length=length(fxs)+1))[2:end].-laps[1]
+        end
+        append!(rt2s,rt2i)
+    end
+    @show length(rt2s); flush(stdout)
+
+    dd["niters"] = niters; dd["totalniters"] = totalniters; dd["rt1"] = rt1; dd["rt2s"] = rt2s
+    dd["avgfits"] = avgfits; dd["f_xs"] = f_xs; dd["inner_fxs"] = inner_fxs
+    if true#iter == num_experiments
+        metadata = Dict()
+        metadata["alpha0"] = σ0; metadata["r"] = r; metadata["maxiter"] = maxiter; metadata["inner_maxiter"] = inner_maxiter;
+        metadata["alpha"] = α; metadata["beta"] = β; metadata["optimmethod"] = optimmethod; metadata["initmethod"] = initmethod
+    end
+    save("sca$(tailstr)_results$(iter).jld","metadata",metadata,"data",dd)
+end
+
 # ADMM
 @show "ADMM"
 mfmethod = :ADMM; penmetric = :SCA; sd_group=:whole; reg = :WH1; α = 10; β = 0; usennc=true
@@ -98,6 +157,30 @@ for (tailstr,initmethod,α,usennc) in [("_nn",:lowrank_nndsvd,0.,true), ("_sp",:
         metadata["alpha"] = α; metadata["beta"] = 0; metadata["optimmethod"] = optimmethod; metadata["initmethod"] = initmethod
     end
     save("admm$(tailstr)_results$(iter).jld","metadata",metadata,"data",dd)
+end
+
+# HALS
+@show "HALS"
+W0, H0, Mw0, Mh0, Wp, Hp, D = initsemisca(X, ncells, initmethod=:isvd,poweradjust=:wh_normalize)
+rt1 = @elapsed Wcd0, Hcd0 = NMF.nndsvd(X, ncells, variant=:ar);
+mfmethod = :HALS; maxiter = hals_maxiter; tol=-1
+for (tailstr,α) in [("_nn",0.),("_sp_nn",0.1)]
+    @show tailstr; flush(stdout)
+    dd = Dict()
+    Wcd, Hcd = copy(Wcd0), copy(Hcd0);
+    result = NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=maxiter, α=α, l₁ratio=1,
+                    tol=tol, verbose=true), X, Wcd, Hcd; W0=W0, H0=H0, d=diag(D), gtW=gtW, gtH=gtH)
+    Wcd, Hcd = copy(Wcd0), copy(Hcd0);
+    rt2 = @elapsed NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=maxiter, α=α, l₁ratio=1,
+                    tol=tol, verbose=false), X, Wcd, Hcd)
+    rt2s = collect(range(start=0,stop=rt2,length=length(result.avgfits)))
+    dd["niters"] = result.niters; dd["totalniters"] = result.niters; dd["rt1"] = rt1; dd["rt2s"] = rt2s
+    dd["avgfits"] = result.avgfits; dd["f_xs"] = result.objvalues;
+    if true#iter == num_experiments
+        metadata = Dict()
+        metadata["maxiter"] = maxiter; metadata["alpha"] = α
+    end
+    save("hals$(tailstr)_results$(iter).jld","metadata",metadata,"data",dd)
 end
 
 end
