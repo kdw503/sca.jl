@@ -1,0 +1,74 @@
+2023-06-12 14:25:07,850 INFO Included extra file "/app/conf.d/fluxbox.conf" during parsing
+2023-06-12 14:25:07,850 INFO Included extra file "/app/conf.d/websockify.conf" during parsing
+2023-06-12 14:25:07,850 INFO Included extra file "/app/conf.d/x11vnc.conf" during parsing
+2023-06-12 14:25:07,850 INFO Included extra file "/app/conf.d/xterm.conf" during parsing
+2023-06-12 14:25:07,850 INFO Included extra file "/app/conf.d/xvfb.conf" during parsing
+2023-06-12 14:25:07,855 INFO supervisord started with pid 26
+2023-06-12 14:25:08,858 INFO spawned: 'xvfb' with pid 28
+2023-06-12 14:25:08,859 INFO spawned: 'x11vnc' with pid 29
+2023-06-12 14:25:08,861 INFO spawned: 'fluxbox' with pid 30
+2023-06-12 14:25:08,862 INFO spawned: 'websockify' with pid 31
+2023-06-12 14:25:08,864 INFO spawned: 'xterm' with pid 32
+2023-06-12 14:25:10,576 INFO success: xvfb entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 14:25:10,576 INFO success: x11vnc entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 14:25:10,576 INFO success: fluxbox entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 14:25:10,576 INFO success: websockify entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 14:25:10,576 INFO success: xterm entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 14:28:45,887 WARN received SIGINT indicating exit request
+2023-06-12 14:28:45,888 INFO waiting for xvfb, x11vnc, fluxbox, websockify, xterm to die
+2023-06-12 14:28:45,889 INFO stopped: xterm (exit status 15)
+2023-06-12 14:28:45,926 INFO stopped: websockify (exit status 0)
+2023-06-12 14:28:45,932 INFO stopped: fluxbox (exit status 0)
+2023-06-12 14:28:46,937 INFO stopped: x11vnc (exit status 2)
+2023-06-12 14:28:46,942 INFO stopped: xvfb (exit status 0)
+2023-06-12 14:32:00,870 INFO Included extra file "/app/conf.d/fluxbox.conf" during parsing
+2023-06-12 14:32:00,872 INFO Included extra file "/app/conf.d/websockify.conf" during parsing
+2023-06-12 14:32:00,872 INFO Included extra file "/app/conf.d/x11vnc.conf" during parsing
+2023-06-12 14:32:00,872 INFO Included extra file "/app/conf.d/xterm.conf" during parsing
+2023-06-12 14:32:00,872 INFO Included extra file "/app/conf.d/xvfb.conf" during parsing
+2023-06-12 14:32:00,889 INFO supervisord started with pid 26
+2023-06-12 14:32:01,893 INFO spawned: 'xvfb' with pid 28
+2023-06-12 14:32:01,895 INFO spawned: 'x11vnc' with pid 29
+2023-06-12 14:32:01,897 INFO spawned: 'fluxbox' with pid 30
+2023-06-12 14:32:01,898 INFO spawned: 'websockify' with pid 31
+2023-06-12 14:32:01,900 INFO spawned: 'xterm' with pid 32
+2023-06-12 14:32:03,097 INFO success: xvfb entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 14:32:03,097 INFO success: x11vnc entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 14:32:03,097 INFO success: fluxbox entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 14:32:03,097 INFO success: websockify entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 14:32:03,097 INFO success: xterm entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 15:11:10,083 INFO Included extra file "/app/conf.d/fluxbox.conf" during parsing
+2023-06-12 15:11:10,087 INFO Included extra file "/app/conf.d/websockify.conf" during parsing
+2023-06-12 15:11:10,087 INFO Included extra file "/app/conf.d/x11vnc.conf" during parsing
+2023-06-12 15:11:10,087 INFO Included extra file "/app/conf.d/xterm.conf" during parsing
+2023-06-12 15:11:10,087 INFO Included extra file "/app/conf.d/xvfb.conf" during parsing
+2023-06-12 15:11:10,092 INFO supervisord started with pid 6
+2023-06-12 15:11:11,095 INFO spawned: 'xvfb' with pid 8
+2023-06-12 15:11:11,097 INFO spawned: 'x11vnc' with pid 9
+2023-06-12 15:11:11,098 INFO spawned: 'fluxbox' with pid 10
+2023-06-12 15:11:11,100 INFO spawned: 'websockify' with pid 11
+2023-06-12 15:11:11,101 INFO spawned: 'xterm' with pid 12
+2023-06-12 15:11:12,299 INFO success: xvfb entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 15:11:12,299 INFO success: x11vnc entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 15:11:12,299 INFO success: fluxbox entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 15:11:12,299 INFO success: websockify entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 15:11:12,299 INFO success: xterm entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 15:24:18,645 INFO exited: xterm (exit status 0; expected)
+2023-06-12 15:24:19,650 INFO spawned: 'xterm' with pid 131
+2023-06-12 15:24:20,674 INFO success: xterm entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-06-12 15:27:42,340 WARN received SIGINT indicating exit request
+2023-06-12 15:27:42,340 INFO waiting for xvfb, x11vnc, fluxbox, websockify, xterm to die
+2023-06-12 15:27:42,342 INFO stopped: xterm (exit status 15)
+2023-06-12 15:27:42,401 INFO stopped: websockify (exit status 0)
+2023-06-12 15:27:42,410 INFO stopped: fluxbox (exit status 0)
+2023-06-12 15:27:43,416 INFO stopped: x11vnc (exit status 2)
+2023-06-12 15:27:43,489 INFO stopped: xvfb (exit status 0)
+2023-06-12 15:28:05,809 INFO exited: xterm (exit status 2; not expected)
+2023-06-12 15:28:05,814 INFO spawned: 'xterm' with pid 110
+2023-06-12 15:28:05,829 INFO exited: fluxbox (exit status 0; expected)
+2023-06-12 15:28:05,834 INFO spawned: 'fluxbox' with pid 111
+2023-06-12 15:28:05,835 WARN received SIGINT indicating exit request
+2023-06-12 15:28:05,835 INFO waiting for xvfb, x11vnc, fluxbox, websockify, xterm to die
+2023-06-12 15:28:05,835 INFO stopped: xterm (terminated by SIGTERM)
+2023-06-12 15:28:05,839 INFO stopped: websockify (terminated by SIGTERM)
+2023-06-12 15:28:05,840 INFO stopped: fluxbox (terminated by SIGTERM)

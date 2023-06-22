@@ -14,22 +14,30 @@ include(joinpath(scapath,"test","testutils.jl"))
 include("dataset.jl")
 include("utils.jl")
 
-using ProfileView, BenchmarkTools
-
 dataset = :fakecells; SNR=0; inhibitidx=0; bias=0.1; initmethod=:lowrank; initpwradj=:wh_normalize
 filter = dataset ∈ [:neurofinder,:fakecells] ? :meanT : :none; filterstr = "_$(filter)"
 datastr = dataset == :fakecells ? "_fc$(inhibitidx)_$(SNR)dB" : "_$(dataset)"
 subtract_bg=false
 
-data_hals_nn = Dict[]; data_hals_sp_nn = Dict[]
-num_experiments = 30
+if true
+    num_experiments = 100
+    sca_maxiter = 400; sca_inner_maxiter = 50; sca_ls_maxiter = 100
+    admm_maxiter = 1500; admm_inner_maxiter = 0; admm_ls_maxiter = 0
+    hals_maxiter = 200
+else
+    num_experiments = 2
+    sca_maxiter = 2; sca_inner_maxiter = 2; sca_ls_maxiter = 2
+    admm_maxiter = 2; admm_inner_maxiter = 0; admm_ls_maxiter = 0
+    hals_maxiter = 2
+end
 
 for iter in 1:num_experiments
-    @show iter
+    @show iter; flush(stdout)
 X, imgsz, lengthT, ncells, gtncells, datadic = load_data(dataset; SNR=SNR, bias=bias, useCalciumT=true,
         inhibitidx=inhibitidx, issave=false, isload=false, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
 
-(m,n,p) = (size(X)...,ncells); dataset == :fakecells && (gtW = datadic["gtW"]; gtH = datadic["gtH"])
+(m,n,p) = (size(X)...,ncells)
+gtW, gtH = dataset == :fakecells ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
 X = noisefilter(filter,X)
 
 if subtract_bg
@@ -41,31 +49,27 @@ if subtract_bg
 end
 
 # HALS
-rt1cd = @elapsed Wcd0, Hcd0 = NMF.nndsvd(X, ncells, variant=:ar);
-mfmethod = :HALS; maxiter=100; 
+@show "HALS"
+W0, H0, Mw0, Mh0, Wp, Hp, D = initsemisca(X, ncells, initmethod=:isvd,poweradjust=:wh_normalize)
+rt1 = @elapsed Wcd0, Hcd0 = NMF.nndsvd(X, ncells, variant=:ar);
+mfmethod = :HALS; maxiter = hals_maxiter; tol=-1
 for (tailstr,α) in [("_nn",0.),("_sp_nn",0.1)]
+    @show tailstr; flush(stdout)
     dd = Dict()
-    avgfits=Float64[]
-    Wcd, Hcd = copy(Wcd0), copy(Hcd0); normalizeW!(Wcd,Hcd)
-    avgfit, ml, merrval, rerrs = matchedfitval(gtW, gtH, Wcd, Hcd; clamp=false)
-    push!(avgfits,avgfit)
     Wcd, Hcd = copy(Wcd0), copy(Hcd0);
     result = NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=maxiter, α=α, l₁ratio=1,
-                    tol=tol, verbose=true), X, Wcd, Hcd)
+                    tol=tol, verbose=true), X, Wcd, Hcd; W0=W0, H0=H0, d=diag(D), gtW=gtW, gtH=gtH)
     Wcd, Hcd = copy(Wcd0), copy(Hcd0);
     rt2 = @elapsed NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=maxiter, α=α, l₁ratio=1,
                     tol=tol, verbose=false), X, Wcd, Hcd)
-    for (iter,(W3,H3)) in enumerate(zip(result.Ws,result.Hs))
-        @show iter
-        normalizeW!(W3,H3)
-        avgfit, ml, merrval, rerrs = matchedfitval(gtW, gtH, W3, H3; clamp=false)
-        push!(avgfits,avgfit)
+    rt2s = collect(range(start=0,stop=rt2,length=length(result.avgfits)))
+    dd["niters"] = result.niters; dd["totalniters"] = result.niters; dd["rt1"] = rt1; dd["rt2s"] = rt2s
+    dd["avgfits"] = result.avgfits; dd["f_xs"] = result.objvalues;
+    if true#iter == num_experiments
+        metadata = Dict()
+        metadata["maxiter"] = maxiter; metadata["alpha"] = α
     end
-    rt2s = range(start=0,stop=rt2,length=length(avgfits))
-    ddhals["hals_alpha$(tailstr)"] = α
-    ddhals["hals_maxiter$(tailstr)"] = maxiter; ddhals["hals_niters$(tailstr)"] = result.niters;
-    ddhals["hals_rt2s$(tailstr)"] = rt2s; ddhals["hals_avgfits$(tailstr)"]=avgfits
-    lines!(axi, avgfits); lines!(axt, rt2s, avgfits)
+    save("hals$(tailstr)_results$(iter).jld","metadata",metadata,"data",dd)
 end
+
 end
-save("hals_results.jld","data_hals_nn",data_hals_nn,"data_hals_sp_nn",data_hals_sp_nn)
