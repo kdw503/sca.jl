@@ -29,5 +29,9 @@ Manifest.toml
 *.tif
 *.jld
 *.mat
+*.jld2
+*.mp4
+*.mpg
+*.zip
 *workspace
 Thumbs.db

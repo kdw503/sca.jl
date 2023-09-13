@@ -1,17 +1,19 @@
+using Pkg
+
 Pkg.activate(".")
 
 #using MultivariateStats # for ICA
-using Images, LinearAlgebra, Printf, Colors, Interpolations
-using FakeCells, AxisArrays, ImageCore, MappedArrays, NMF, Statistics
+using Images, LinearAlgebra, Printf, Colors, Interpolations, JLD2
+using FakeCells, AxisArrays, ImageCore, MappedArrays, NMF, Statistics, TiledFactorizations
 using ImageAxes # avoid using ImageCore.nimages for AxisArray type array
+using TestData
 # using Convex, SCS, VideoIO
 
 #import SymmetricComponentAnalysis as SCA
 using SymmetricComponentAnalysis
 SCA = SymmetricComponentAnalysis
 
-Images.save("dummy.png",rand(2,2)) # If we didn't call this line before `using PyPlot`,
-                            # ImageMagick is used when saving image. That doesn't
-                            # properly close the file after saving.
-using PyPlot
 scapath = joinpath(dirname(pathof(SCA)),"..")
+
+include(joinpath(scapath,"test","testutils.jl"))
+include(joinpath(workpath,"utils.jl"))
