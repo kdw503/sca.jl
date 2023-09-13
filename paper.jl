@@ -449,8 +449,8 @@ using BoxTrees, TileTrees, TileTreesGUI, ImageView
 t1, t2 = zeros(200), zeros(200)
 t1[rand(1:200, 30)] = rand(30)   # active for 30/200 time points
 t2[rand(1:200, 30)] = rand(30)
-ttree = TileTree([Tile((Span(16,50), Span(1,80)), ones(35,80), t1),
-                  Tile((Span(1,40), Span(71,100)), ones(40,30), t2)])
+ttree = TileTree([Tile((TileTrees.Span(16,50), TileTrees.Span(1,80)), ones(35,80), t1),
+                  Tile((TileTrees.Span(1,40), TileTrees.Span(71,100)), ones(40,30), t2)])
 
 ## Visualize the TileTree
 
