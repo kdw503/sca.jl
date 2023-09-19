@@ -12,7 +12,7 @@ include(joinpath(workpath,"setup_plot.jl"))
 subworkpath = joinpath(workpath,"paper","size")
 
 z = 0.5
-factors = [1,2,4,8]
+factors = [1,2,4,8,20]
 for (idx,factor) = enumerate(factors)
 plottime = Inf
 for (mtdstr, submtdstrs) in [("sca",["_sp", "_sp_nn"]),("admm",["_nn"]),("hals",["_nn", "_sp_nn"])]
@@ -60,7 +60,7 @@ alpha = 0.2; cls = distinguishable_colors(10); clbs = convert.(RGBA,cls,alpha)
 
 plotrng = Colon()
 fig = Figure(resolution=(400,300))
-maxplottimes = [0.3,0.4,0.8,3.0]
+maxplottimes = [0.3,0.4,0.8,3.0,100.0]
 ax = GLMakie.Axis(fig[1, 1], limits = ((0,min(maxplottimes[idx],plottime)), nothing), xlabel = "time(sec)", ylabel = "average fit", title = "Average Fit Value vs. Running Time")
 
 lns = Dict(); bnds=Dict()

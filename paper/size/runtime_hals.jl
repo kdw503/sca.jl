@@ -19,9 +19,9 @@ subtract_bg=false
 
 if true
     num_experiments = 2
-    sca_maxiter = 400; sca_inner_maxiter = 50; sca_ls_maxiter = 100
-    admm_maxiter = 1500; admm_inner_maxiter = 0; admm_ls_maxiter = 0
-    hals_maxiter = 200
+    sca_maxiter = 200; sca_inner_maxiter = 50; sca_ls_maxiter = 100
+    admm_maxiter = 700; admm_inner_maxiter = 0; admm_ls_maxiter = 0
+    hals_maxiter = 100
 else
     num_experiments = 2
     sca_maxiter = 2; sca_inner_maxiter = 2; sca_ls_maxiter = 2
@@ -29,7 +29,7 @@ else
     hals_maxiter = 2
 end
 
-factors = [1,2,4,8]
+factors = [20]
 for iter in 1:num_experiments
     @show iter; flush(stdout)
 for factor = factors

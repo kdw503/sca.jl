@@ -19,21 +19,21 @@ subtract_bg=false
 
 if true
     num_experiments = 2
-    sca_maxiter = 400; sca_inner_maxiter = 50; sca_ls_maxiter = 100
-    admm_maxiter = 1500; admm_inner_maxiter = 0; admm_ls_maxiter = 0
-    hals_maxiter = 200
+    sca_maxiter = 100; sca_inner_maxiter = 50; sca_ls_maxiter = 100
+    admm_maxiter = 400; admm_inner_maxiter = 0; admm_ls_maxiter = 0
+    hals_maxiter = 100
 else
     num_experiments = 2
     sca_maxiter = 4; sca_inner_maxiter = 2; sca_ls_maxiter = 2
     admm_maxiter = 4; admm_inner_maxiter = 0; admm_ls_maxiter = 0
     hals_maxiter = 4
 end
-factors = [20]
+factors = [10]
 for iter in 1:num_experiments
     @show iter; flush(stdout)
 for factor = factors
     fovsz = (40,20)
-    imgsz = (factor*fovsz[1],fovsz[2]); lengthT = factor*100
+    imgsz = (factor*fovsz[1],fovsz[2]); lengthT = factor*1000
 X, imgsz, lengthT, ncells, gtncells, datadic = load_data(dataset; imgsz=imgsz, fovsz=fovsz, lengthT=lengthT, SNR=SNR, bias=bias, useCalciumT=true,
         inhibitindices=inhibitindices, issave=false, isload=false, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
 
@@ -62,7 +62,7 @@ maxiter = sca_maxiter; inner_maxiter = sca_inner_maxiter; ls_maxiter = sca_ls_ma
 # Result demonstration parameters
 makepositive = true; poweradjust = :none
 try
-for (tailstr,initmethod,α,β) in [("_sp",:isvd,100.,0.), ("_sp_nn",:nndsvd,100.,1000.)] #("_nn",:nndsvd,0.,1000.), 
+for (tailstr,initmethod,α,β) in [("_sp",:isvd,0.001,0.), ("_sp_nn",:nndsvd,0.001,0.001)] #("_nn",:nndsvd,0.,0.001.),
     @show tailstr; flush(stdout)
     dd = Dict()
     rt1 = @elapsed W0, H0, Mw0, Mh0, Wp, Hp, D = initsemisca(X, ncells, initmethod=initmethod,poweradjust=initpwradj)
@@ -79,11 +79,20 @@ for (tailstr,initmethod,α,β) in [("_sp",:isvd,100.,0.), ("_sp_nn",:nndsvd,100.
     Mw, Mh = copy(Mw0), copy(Mh0);
     rt2 = @elapsed W1, H1, objvals, laps, trs, niters = scasolve!(X, W0, H0, D, Mw, Mh, Wp, Hp; gtW=gtW, gtH=gtH,
                                     penmetric=penmetric, stparams=stparams, lsparams=lsparams, cparams=cparams);
+    @show rt2
     Mw, Mh = copy(Mw0), copy(Mh0);
     cparams.store_trace = false; cparams.store_inner_trace = false;
     cparams.show_trace=false; cparams.show_inner_trace=false; cparams.plotiterrng=1:0
     rt2 = @elapsed W1, H1, objvals, laps, _ = scasolve!(X, W0, H0, D, Mw, Mh, Wp, Hp; gtW=gtW, gtH=gtH,
                                      penmetric=penmetric, stparams=stparams, lsparams=lsparams, cparams=cparams);
+    avgfit, ml, merrval, rerrs = SCA.matchedfitval(gtW, gtH, W1, H1; clamp=false)
+    normalizeW!(W1,H1); W3,H3 = sortWHslices(W1,H1)
+    makepositive && flip2makepos!(W3,H3)
+    fprex = "sca$(factor)"
+    fname = joinpath(subworkpath,"$(fprex)_a$(α)_b$(β)_af$(avgfit)_it$(maxiter)_rt$(rt2)")
+    #imsave_data(dataset,fname,W3,H3,imgsz,100; saveH=false)
+    TestData.imsave_data_gt(dataset,fname*"_gt", W3,H3,gtW,gtH,imgsz,100; saveH=true)
+
     f_xs = getdata(trs,:f_x); niters = getdata(trs,:niter); totalniters = sum(niters)
     avgfitss = getdata(trs,:avgfits); fxss = getdata(trs,:fxs)
     avgfits = Float64[]; inner_fxs = Float64[]; rt2s = Float64[]
@@ -154,4 +163,3 @@ for tailstr in ["_sp","_sp_nn"]
 end
 save(joinpath(subworkpath,"sca$(factor)_runtime_vs_avgfits.jld2"),"rng",rng, "stat_nn", stat_nn, "stat_sp", stat_sp, "stat_sp_nn", stat_sp_nn)
 end
-
