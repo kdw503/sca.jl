@@ -1,7 +1,17 @@
-using Pkg
-Pkg.activate(".")
-
-using GLMakie, JLD2, Colors
+using JLD2, Colors
+is_X11_available = true
+try
+    Sys.islinux() && run(`ls /usr/bin/x11vnc`) # check if this is noVNC graphical platform
+    using ImageView, GLMakie
+    GLMakie.activate()
+    AMakie = GLMakie
+catch # not a graphical platform
+    @warn("Not a RIS noVNC graphical platform")
+    using CairoMakie
+    global is_X11_available = false
+    CairoMakie.activate()
+    AMakie = CairoMakie
+end
 
 # mtdcolors = [RGB{N0f8}(0.00,0.00,0.00), # black
 #             RGB{N0f8}(0.00,0.45,0.70),  # greenish blue

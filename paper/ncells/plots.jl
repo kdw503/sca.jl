@@ -7,7 +7,7 @@ elseif Sys.isunix()
     workpath=ENV["MYSTORAGE"]*"/work/julia/sca"
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
-cd(workpath)
+cd(workpath); Pkg.activate(".")
 include(joinpath(workpath,"setup_plot.jl"))
 subworkpath = joinpath(workpath,"paper","ncells")
 
@@ -59,7 +59,7 @@ alpha = 0.2; cls = distinguishable_colors(10); clbs = convert.(RGBA,cls,alpha)
 
 plotlength = min(length(rng),50); plotrng = Colon()
 fig = Figure(resolution=(400,300))
-ax = GLMakie.Axis(fig[1, 1], limits = ((0,min(0.3,plottime)), nothing), xlabel = "time(sec)", ylabel = "average fit", title = "Average Fit Value vs. Running Time")
+ax = AMakie.Axis(fig[1, 1], limits = ((0,min(0.3,plottime)), nothing), xlabel = "time(sec)", ylabel = "average fit", title = "Average Fit Value vs. Running Time")
 
 lns = Dict(); bnds=Dict()
 # for (i,(frpx, lbl)) in enumerate([("sca_sp","SMF (α=100,β=0)"),("hals_nn","HALS (α=0)"),("hals_sp_nn","HALS (α=0.1)"),

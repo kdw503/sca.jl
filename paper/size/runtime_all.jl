@@ -7,7 +7,7 @@ elseif Sys.isunix()
     workpath=ENV["MYSTORAGE"]*"/work/julia/sca"
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
-cd(workpath)
+cd(workpath); Pkg.activate(".")
 subworkpath = joinpath(workpath,"paper","size")
 
 include(joinpath(workpath,"setup_light.jl"))
@@ -19,9 +19,9 @@ subtract_bg=false
 
 if true
     num_experiments = 2
-    sca_maxiter = 200; sca_inner_maxiter = 50; sca_ls_maxiter = 100
-    admm_maxiter = 700; admm_inner_maxiter = 0; admm_ls_maxiter = 0
-    hals_maxiter = 100
+    sca_maxiter = 100; sca_inner_maxiter = 50; sca_ls_maxiter = 100
+    admm_maxiter = 400; admm_inner_maxiter = 0; admm_ls_maxiter = 0
+    hals_maxiter = 200
 else
     num_experiments = 2
     sca_maxiter = 4; sca_inner_maxiter = 2; sca_ls_maxiter = 2
@@ -52,7 +52,7 @@ rt1 = @elapsed W0, H0, Mw0, Mh0, Wp, Hp, D = initsemisca(X, ncells, initmethod=i
 
 # SCA
 @show "SCA"
-mfmethod = :SCA; penmetric = :SCA; sd_group=:whole; regSpar = :WH1M2; regNN=:WH2M2; α = 100; β = 1000
+mfmethod = :SCA; penmetric = :SCA; sd_group=:whole; regSpar = :WH1M2; regNN=:WH2M2; α = 0.001; β = 0.01
 useRelaxedL1=true; s=10*0.3^0; 
 r=(0.3)^1 #0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
       # if this is too big iteration number would be increased
@@ -62,7 +62,7 @@ maxiter = sca_maxiter; inner_maxiter = sca_inner_maxiter; ls_maxiter = sca_ls_ma
 # Result demonstration parameters
 makepositive = true; poweradjust = :none
 try
-for (tailstr,initmethod,α,β) in [("_sp",:isvd,0.001,0.), ("_sp_nn",:nndsvd,0.001,0.001)] #("_nn",:nndsvd,0.,1000.), 
+for (tailstr,initmethod,α,β) in [("_sp",:isvd,0.001,0.), ("_nn",:nndsvd,0.,0.01), ("_sp_nn",:nndsvd,0.001,0.001)]
     @show tailstr; flush(stdout)
     dd = Dict()
     rt1 = @elapsed W0, H0, Mw0, Mh0, Wp, Hp, D = initsemisca(X, ncells, initmethod=initmethod,poweradjust=initpwradj)

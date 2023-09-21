@@ -5,11 +5,9 @@ elseif Sys.isunix()
     workpath=ENV["MYSTORAGE"]*"/work/julia/sca"
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
-cd(workpath)
-include(joinpath(workpath,"setup_light.jl"))
+cd(workpath); Pkg.activate(".")
+include(joinpath(workpath,"setup.jl"))
 subworkpath = joinpath(workpath,"paper","neurofinder")
-
-using GLMakie
 
 dataset = :neurofinder_small; SNR=0; inhibitindices=0; bias=0.1; initmethod=:isvd; initpwradj=:wh_normalize
 filter = dataset ∈ [:neurofinder,:neurofinder_small,:fakecells] ? :meanT : :none; filterstr = "_$(filter)"
@@ -134,7 +132,7 @@ function plotH(path,X,GTX,Hsca,Hadmm,Hcd,rng)
     gtncells = length(GTX); ncells = size(Hsca,1)
     for i in 1:ncells
         f = Figure(resolution = (1000,300))
-        ax11=GLMakie.Axis(f[1,1],title="$i", titlesize=30)
+        ax11=AMakie.Axis(f[1,1],title="$i", titlesize=30)
         i <= gtncells && begin
             vecs = collect.(GTX[i][2]); idxs = eltype(vecs[1])[]; foreach(v->append!(idxs,v),vecs)
             gtxi = X[idxs,:]; foreach(c->c.=c.*GTX[i][3],eachcol(gtxi))
@@ -158,22 +156,22 @@ imgadmm1 = mkimgW(Wadmms[1],imgsz,gridcols=gridcols); imgadmm2 = mkimgW(Wadmms[e
 imghals1 = mkimgW(Whalss[1],imgsz,gridcols=gridcols); imghals2 = mkimgW(Whalss[end],imgsz,gridcols=gridcols)
 labels = ["SMF","Compressed NMF","HALS NMF"]
 f = Figure(resolution = (900,1500))
-ax11=GLMakie.Axis(f[1,1],title=labels[1], titlesize=30, subtitle="maxiter=$(scamaxiterrng[1]), runtime=$(round(rtscas[1],digits=2))sec",
+ax11=AMakie.Axis(f[1,1],title=labels[1], titlesize=30, subtitle="maxiter=$(scamaxiterrng[1]), runtime=$(round(rtscas[1],digits=2))sec",
         subtitlesize=25, aspect = DataAspect())
 hidedecorations!(ax11)
-ax12=GLMakie.Axis(f[1,2],title=labels[1], titlesize=30, subtitle="maxiter=$(scamaxiterrng[end]), runtime=$(round(rtscas[end],digits=2))sec",
+ax12=AMakie.Axis(f[1,2],title=labels[1], titlesize=30, subtitle="maxiter=$(scamaxiterrng[end]), runtime=$(round(rtscas[end],digits=2))sec",
         subtitlesize=25, aspect = DataAspect())
 hidedecorations!(ax12)
-ax21=GLMakie.Axis(f[2,1],title=labels[2], titlesize=30, subtitle="maxiter=$(admmmaxiterrng[1]), runtime=$(round(rtadmms[1],digits=2))sec",
+ax21=AMakie.Axis(f[2,1],title=labels[2], titlesize=30, subtitle="maxiter=$(admmmaxiterrng[1]), runtime=$(round(rtadmms[1],digits=2))sec",
         subtitlesize=25, aspect = DataAspect())
 hidedecorations!(ax21)
-ax22=GLMakie.Axis(f[2,2],title=labels[2], titlesize=30, subtitle="maxiter=$(admmmaxiterrng[end]), runtime=$(round(rtadmms[end],digits=2))sec",
+ax22=AMakie.Axis(f[2,2],title=labels[2], titlesize=30, subtitle="maxiter=$(admmmaxiterrng[end]), runtime=$(round(rtadmms[end],digits=2))sec",
         subtitlesize=25, aspect = DataAspect())
 hidedecorations!(ax22)
-ax31=GLMakie.Axis(f[3,1],title=labels[3], titlesize=30, subtitle="maxiter=$(halsmaxiterrng[1]), runtime=$(round(rthalss[1],digits=2))sec",
+ax31=AMakie.Axis(f[3,1],title=labels[3], titlesize=30, subtitle="maxiter=$(halsmaxiterrng[1]), runtime=$(round(rthalss[1],digits=2))sec",
         subtitlesize=25, aspect = DataAspect())
 hidedecorations!(ax31)
-ax32=GLMakie.Axis(f[3,2],title=labels[3], titlesize=30, subtitle="maxiter=$(halsmaxiterrng[end]), runtime=$(round(rthalss[end],digits=2))sec",
+ax32=AMakie.Axis(f[3,2],title=labels[3], titlesize=30, subtitle="maxiter=$(halsmaxiterrng[end]), runtime=$(round(rthalss[end],digits=2))sec",
         subtitlesize=25, aspect = DataAspect())
 hidedecorations!(ax32)
 image!(ax11, rotr90(imgsca1)); image!(ax12, rotr90(imgsca2))

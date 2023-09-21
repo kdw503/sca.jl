@@ -5,7 +5,7 @@ elseif Sys.isunix()
     workpath=ENV["MYSTORAGE"]*"/work/julia/sca"
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
-cd(workpath)
+cd(workpath); Pkg.activate(".")
 include(joinpath(workpath,"setup_light.jl"))
 subworkpath = joinpath(workpath,"paper","neurofinder")
 
@@ -271,16 +271,16 @@ imgdel2 = load(joinpath(subworkpath,"SCA_init_delete_f0.16143130379239573_W_2.pn
 img1 = load(joinpath(subworkpath,"SCA_neurofinder_small_none_sbg_delete_whole_optim_lbfgs_WH1M2_aw10_ah0_WH2M2_bw0_bh0__f7.430181757332959_af0.46554846902884306_r0.3_it100_rt4.2075799_W_1.png"))
 img2 = load(joinpath(subworkpath,"SCA_neurofinder_small_none_sbg_delete_whole_optim_lbfgs_WH1M2_aw10_ah0_WH2M2_bw0_bh0__f7.430181757332959_af0.46554846902884306_r0.3_it100_rt4.2075799_W_2.png"))
 f = Figure()
-ax1 = GLMakie.Axis(f[1,1],aspect=DataAspect()); hidedecorations!(ax1); hidespines!(ax1)
-ax2 = GLMakie.Axis(f[2,1],aspect=DataAspect()); hidedecorations!(ax2); hidespines!(ax2)
-ax3 = GLMakie.Axis(f[3,1],aspect=DataAspect()); hidedecorations!(ax3); hidespines!(ax3)
-ax4 = GLMakie.Axis(f[4,1],aspect=DataAspect()); hidedecorations!(ax4); hidespines!(ax4)
+ax1 = AMakie.Axis(f[1,1],aspect=DataAspect()); hidedecorations!(ax1); hidespines!(ax1)
+ax2 = AMakie.Axis(f[2,1],aspect=DataAspect()); hidedecorations!(ax2); hidespines!(ax2)
+ax3 = AMakie.Axis(f[3,1],aspect=DataAspect()); hidedecorations!(ax3); hidespines!(ax3)
+ax4 = AMakie.Axis(f[4,1],aspect=DataAspect()); hidedecorations!(ax4); hidespines!(ax4)
 image!(ax1,rotr90(imgdel1))
 image!(ax2,rotr90(img1))
 image!(ax3,rotr90(imgdel2))
 image!(ax4,rotr90(img2))
 
 f = Figure()
-ax = GLMakie.Axis(f[1,1])
+ax = AMakie.Axis(f[1,1])
 lindel2 = lines!(ax,H2[2,:])
 linsca2 = lines!(ax,H1[2,:])

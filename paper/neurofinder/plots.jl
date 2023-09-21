@@ -5,7 +5,7 @@ elseif Sys.isunix()
     workpath=ENV["MYSTORAGE"]*"/work/julia/sca"
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
-cd(workpath)
+cd(workpath); Pkg.activate(".")
 include(joinpath(workpath,"setup_plot.jl"))
 subworkpath = joinpath(workpath,"paper","neurofinder")
 
@@ -56,8 +56,8 @@ end
 # admm_sp_nn_upper = admm_sp_nn_means + z*admm_sp_nn_stds; admm_sp_nn_lower = admm_sp_nn_means - z*admm_sp_nn_stds
 
 fig = Figure()
-ax1 = GLMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Average Fit Value vs. Running Time")
-ax2 = GLMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "Sparseness of W" #= yticklabelcolor = :red =# )
+ax1 = AMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Average Fit Value vs. Running Time")
+ax2 = AMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "Sparseness of W" #= yticklabelcolor = :red =# )
 hidespines!(ax2)
 hidexdecorations!(ax2)
 
@@ -133,8 +133,8 @@ for mtdstr in ["sca","admm","hals"]
 end
 
 fig = Figure(resolution = (800,400))
-ax11_1 = GLMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Fit and Sparsity Values vs. Running Time")
-ax11_2 = GLMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "sparsity of W" #= yticklabelcolor = :red =# )
+ax11_1 = AMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Fit and Sparsity Values vs. Running Time")
+ax11_2 = AMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "sparsity of W" #= yticklabelcolor = :red =# )
 hidespines!(ax11_2)
 hidexdecorations!(ax11_2)
 
@@ -175,8 +175,8 @@ admmw8_sp_nn2_means = ddadmmw8["stat_sp_nn2"][1]; admmw8_sp_nn2_stds = ddadmmw8[
 admmw8_sp_nn2_upper = admmw8_sp_nn2_means + z*admmw8_sp_nn2_stds; admmw8_sp_nn2_lower = admmw8_sp_nn2_means - z*admmw8_sp_nn2_stds
 
 fig = Figure(resolution = (800,400))
-ax11_1 = GLMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Fit and Sparsity Values vs. Running Time")
-ax11_2 = GLMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "Sparsity of W" #= yticklabelcolor = :red =# )
+ax11_1 = AMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Fit and Sparsity Values vs. Running Time")
+ax11_2 = AMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "Sparsity of W" #= yticklabelcolor = :red =# )
 hidespines!(ax11_2)
 hidexdecorations!(ax11_2)
 
@@ -226,7 +226,7 @@ z = quantile(Normal(), 1 - alpha / 2)
 lower_bound = y - z * se
 upper_bound = y + z * se
 
-fig = GLMakie.Figure()
+fig = AMakie.Figure()
 
 #----- Axis
 # ax1 = Axis(f[1, 1])
@@ -284,7 +284,7 @@ fig = GLMakie.Figure()
 # xminorticks = IntervalsBetween(2); xminorticks = [1,2,3,4]
 # xcale = identity, log10, sqrt, Makie.logit(logit function)
 #         Makie.Symlog10(10.0) (Symlog10 with linear scaling between -10 and 10)
-ax = GLMakie.Axis(fig[1, 1], xlabel = "x label", ylabel = "y label", title = "Title")
+ax = AMakie.Axis(fig[1, 1], xlabel = "x label", ylabel = "y label", title = "Title")
 
 #----- lines!
 lines!(ax, x, y, color=:blue, label="Plot")
@@ -316,8 +316,8 @@ Legend(f[2, 1], [lin, sca, lin], ["a line", "some dots", "line again"],
 
 
 
-f = GLMakie.Figure()
-GLMakie.Axis(f[1, 1])
+f = AMakie.Figure()
+AMakie.Axis(f[1, 1])
 
 n, m = 100, 101
 t = range(0, 1, length=m)
@@ -329,8 +329,8 @@ lines!(t, μ)              # plot mean line
 band!(t, μ + σ, μ - σ)   # plot stddev band
 
 
-f = GLMakie.Figure()
-GLMakie.Axis(f[1, 1])
+f = AMakie.Figure()
+AMakie.Axis(f[1, 1])
 
 xs = 1:0.2:10
 ys_low = -0.2 .* sin.(xs) .- 0.25

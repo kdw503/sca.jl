@@ -7,7 +7,7 @@ elseif Sys.isunix()
     workpath=ENV["MYSTORAGE"]*"/work/julia/sca"
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
-cd(workpath)
+cd(workpath); Pkg.activate(".")
 subworkpath = joinpath(workpath,"paper","ncells")
 
 include(joinpath(workpath,"setup_light.jl"))

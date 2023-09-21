@@ -7,11 +7,8 @@ elseif Sys.isunix()
     workpath=ENV["MYSTORAGE"]*"/work/julia/sca"
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
-cd(workpath)
+cd(workpath); Pkg.activate(".")
 subworkpath = joinpath(workpath,"paper","audio")
-
-Pkg.activate(".")
-using GLMakie, JLD, Colors
 
 z = 0.5
 
@@ -66,8 +63,8 @@ mtdcolors = [RGB{N0f8}(0.00,0.00,0.00),RGB{N0f8}(0.00,0.45,0.70),RGB{N0f8}(0.90,
 alpha = 0.2; mtdcoloras = convert.(RGBA,mtdcolors,alpha)
 
 fig = Figure()
-ax1 = GLMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Average Fit Value vs. Running Time")
-ax2 = GLMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "Sparseness of W" #= yticklabelcolor = :red =# )
+ax1 = AMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Average Fit Value vs. Running Time")
+ax2 = AMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "Sparseness of W" #= yticklabelcolor = :red =# )
 hidespines!(ax2)
 hidexdecorations!(ax2)
 
@@ -152,8 +149,8 @@ mtdcolors = [RGB{N0f8}(0.00,0.00,0.00),RGB{N0f8}(0.00,0.45,0.70),RGB{N0f8}(0.90,
 alpha = 0.2; mtdcoloras = convert.(RGBA,mtdcolors,alpha)
 
 fig = Figure(resolution = (800,400))
-ax11_1 = GLMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Fit and Sparsity Values vs. Running Time")
-ax11_2 = GLMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "sparsity of W" #= yticklabelcolor = :red =# )
+ax11_1 = AMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Fit and Sparsity Values vs. Running Time")
+ax11_2 = AMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "sparsity of W" #= yticklabelcolor = :red =# )
 hidespines!(ax11_2)
 hidexdecorations!(ax11_2)
 
@@ -194,8 +191,8 @@ admmw8_sp_nn2_means = ddadmmw8["stat_sp_nn2"][1]; admmw8_sp_nn2_stds = ddadmmw8[
 admmw8_sp_nn2_upper = admmw8_sp_nn2_means + z*admmw8_sp_nn2_stds; admmw8_sp_nn2_lower = admmw8_sp_nn2_means - z*admmw8_sp_nn2_stds
 
 fig = Figure(resolution = (800,400))
-ax11_1 = GLMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Fit and Sparsity Values vs. Running Time")
-ax11_2 = GLMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "Sparsity of W" #= yticklabelcolor = :red =# )
+ax11_1 = AMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Fit and Sparsity Values vs. Running Time")
+ax11_2 = AMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "Sparsity of W" #= yticklabelcolor = :red =# )
 hidespines!(ax11_2)
 hidexdecorations!(ax11_2)
 

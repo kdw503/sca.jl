@@ -7,15 +7,14 @@ elseif Sys.isunix()
     workpath=ENV["MYSTORAGE"]*"/work/julia/sca"
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
-cd(workpath)
+cd(workpath); Pkg.activate(".")
 subworkpath = joinpath(workpath,"paper","inhibit")
 
-include(joinpath(workpath,"setup_light.jl"))
+include(joinpath(workpath,"setup.jl"))
 include(joinpath(scapath,"test","testdata.jl"))
 include(joinpath(scapath,"test","testutils.jl"))
 include(joinpath(workpath,"dataset.jl"))
 include(joinpath(workpath,"utils.jl"))
-using GLMakie
 
 dataset = :fakecells; SNR=0; inhibitindices=[1,2]; bias=0.1; initmethod=:isvd; initpwradj=:wh_normalize
 filter = dataset ∈ [:neurofinder,:fakecells] ? :meanT : :none; filterstr = "_$(filter)"
@@ -144,8 +143,8 @@ imggt = mkimgW(gtW,imgsz)
 hdata = eachcol(gtH)
 labels = ["cell $i" for i in 1:length(hdata)]
 f = Figure(resolution = (900,400))
-ax11=GLMakie.Axis(f[1,1],title="W component", aspect = DataAspect()); hidedecorations!(ax11)
-axall2=GLMakie.Axis(f[:,2],title="H component",xlabel="time index")
+ax11=AMakie.Axis(f[1,1],title="W component", aspect = DataAspect()); hidedecorations!(ax11)
+axall2=AMakie.Axis(f[:,2],title="H component",xlabel="time index")
 image!(ax11, rotr90(imggt))
 lin = [lines!(axall2,hd,color=dtcolors[i]) for (i,hd) in enumerate(hdata)]
 foreach(i->labels[i] *= " (inhibited)" ,inhibitindices)
@@ -158,11 +157,11 @@ imggt = mkimgW(gtW,imgsz); imgsca = mkimgW(Wsca,imgsz); imgadmm = mkimgW(Wadmm,i
 hdata = [gtH[:,inhibitindices[1]],Hsca[inhibitindices[1],:],Hadmm[inhibitindices[1],:],Hhals[inhibitindices[1],:]] # Hsca inhibit index setting for plot
 labels = ["Ground Truth","SMF","Compressed NMF","HALS NMF"]
 f = Figure(resolution = (1000,400))
-ax11=GLMakie.Axis(f[1,1],title=labels[1], aspect = DataAspect()); hidedecorations!(ax11)
-ax21=GLMakie.Axis(f[2,1],title=labels[2], aspect = DataAspect()); hidedecorations!(ax21)
-ax31=GLMakie.Axis(f[3,1],title=labels[3], aspect = DataAspect()); hidedecorations!(ax31)
-ax41=GLMakie.Axis(f[4,1],title=labels[4], aspect = DataAspect()); hidedecorations!(ax41)
-axall2=GLMakie.Axis(f[:,2],title="Inhibited H component",xlabel="time index")
+ax11=AMakie.Axis(f[1,1],title=labels[1], aspect = DataAspect()); hidedecorations!(ax11)
+ax21=AMakie.Axis(f[2,1],title=labels[2], aspect = DataAspect()); hidedecorations!(ax21)
+ax31=AMakie.Axis(f[3,1],title=labels[3], aspect = DataAspect()); hidedecorations!(ax31)
+ax41=AMakie.Axis(f[4,1],title=labels[4], aspect = DataAspect()); hidedecorations!(ax41)
+axall2=AMakie.Axis(f[:,2],title="Inhibited H component",xlabel="time index")
 image!(ax11, rotr90(imggt)); image!(ax21, rotr90(imgsca)); image!(ax31, rotr90(imgadmm)); image!(ax41, rotr90(imghals))
 lin = [lines!(axall2,hd,color=mtdcolors[i]) for (i,hd) in enumerate(hdata)]
 f[:,3] = Legend(f[:,2],lin,labels)
@@ -176,13 +175,13 @@ if length(inhibitindices) > 1
     hdata2 = [gtH[:,inhibitindices[2]],Hsca[inhibitindices[2],:],Hadmm[inhibitindices[2],:],Hhals[inhibitindices[2],:]] # Hsca inhibit index setting for plot
     labels = ["Ground Truth","SMF","Compressed NMF","HALS NMF"]
     f = Figure(resolution = (1000,400))
-    ax11=GLMakie.Axis(f[1,1],title=labels[1], aspect = DataAspect()); hidedecorations!(ax11)
-    ax21=GLMakie.Axis(f[2,1],title=labels[2], aspect = DataAspect()); hidedecorations!(ax21)
-    ax31=GLMakie.Axis(f[3,1],title=labels[3], aspect = DataAspect()); hidedecorations!(ax31)
-    ax41=GLMakie.Axis(f[4,1],title=labels[4], aspect = DataAspect()); hidedecorations!(ax41)
+    ax11=AMakie.Axis(f[1,1],title=labels[1], aspect = DataAspect()); hidedecorations!(ax11)
+    ax21=AMakie.Axis(f[2,1],title=labels[2], aspect = DataAspect()); hidedecorations!(ax21)
+    ax31=AMakie.Axis(f[3,1],title=labels[3], aspect = DataAspect()); hidedecorations!(ax31)
+    ax41=AMakie.Axis(f[4,1],title=labels[4], aspect = DataAspect()); hidedecorations!(ax41)
     image!(ax11, rotr90(imggt)); image!(ax21, rotr90(imgsca)); image!(ax31, rotr90(imgadmm)); image!(ax41, rotr90(imghals))
-    ax122=GLMakie.Axis(f[1:2,2],title="Inhibited H components [cell 1(top), cell 2(bottom)]"); hidexdecorations!(ax122, grid = false, ticks=false)
-    ax342=GLMakie.Axis(f[3:4,2],xlabel="time index"); linkxaxes!(ax122,ax342)
+    ax122=AMakie.Axis(f[1:2,2],title="Inhibited H components [cell 1(top), cell 2(bottom)]"); hidexdecorations!(ax122, grid = false, ticks=false)
+    ax342=AMakie.Axis(f[3:4,2],xlabel="time index"); linkxaxes!(ax122,ax342)
     lin1 = [lines!(ax122,hd,color=mtdcolors[i]) for (i,hd) in enumerate(hdata1)]
     lin2 = [lines!(ax342,hd,color=mtdcolors[i]) for (i,hd) in enumerate(hdata2)]
     f[:,3] = Legend(f[:,2],lin1,labels)
