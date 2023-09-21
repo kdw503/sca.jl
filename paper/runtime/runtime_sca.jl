@@ -7,7 +7,7 @@ elseif Sys.isunix()
     workpath=ENV["MYSTORAGE"]*"/work/julia/sca"
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
-cd(workpath)
+cd(workpath); Pkg.activate(".")
 subworkpath = joinpath(workpath,"paper","runtime")
 
 include(joinpath(workpath,"setup_light.jl"))
@@ -213,7 +213,7 @@ alpha = 0.2; cls = distinguishable_colors(10); clbs = convert.(RGBA,cls,alpha)
 
 plotrng = :
 fig = Figure(resolution=(600,400))
-ax = GLMakie.Axis(fig[1, 1], limits = ((0,0.3), nothing), xlabel = "time(sec)", ylabel = "average fit", title = "Average Fit Value vs. Running Time")
+ax = AMakie.Axis(fig[1, 1], limits = ((0,0.3), nothing), xlabel = "time(sec)", ylabel = "average fit", title = "Average Fit Value vs. Running Time")
 
 lns = Dict(); clridx = 0
 for initmethod in (:isvd, :nndsvd)
@@ -290,7 +290,7 @@ alpha = 0.2; cls = distinguishable_colors(12); clbs = convert.(RGBA,cls,alpha)
 
 plotrng = :
 fig = Figure(resolution=(600,400))
-ax = GLMakie.Axis(fig[1, 1], limits = ((0,0.3), nothing), xlabel = "time(sec)", ylabel = "average fit", title = "Average Fit Value vs. Running Time")
+ax = AMakie.Axis(fig[1, 1], limits = ((0,0.3), nothing), xlabel = "time(sec)", ylabel = "average fit", title = "Average Fit Value vs. Running Time")
 
 lns = Dict(); clridx = 0
 for (useprecond, precondtype, submtdstr) in [(false, :nothing, "_sp"), (true, :invert,"_sp"), (true, :sparse,"_sp"),

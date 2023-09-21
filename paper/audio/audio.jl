@@ -7,15 +7,14 @@ elseif Sys.isunix()
     workpath=ENV["MYSTORAGE"]*"/work/julia/sca"
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
-cd(workpath)
+cd(workpath); Pkg.activate(".")
 subworkpath = joinpath(workpath,"paper","audio")
 
-include(joinpath(workpath,"setup_light.jl"))
+include(joinpath(workpath,"setup.jl"))
 include(joinpath(scapath,"test","testdata.jl"))
 include(joinpath(scapath,"test","testutils.jl"))
 include(joinpath(workpath,"dataset.jl"))
 include(joinpath(workpath,"utils.jl"))
-using GLMakie
 
 dataset = :audio; SNR=0; inhibitindices=0; bias=0.1; initmethod=:isvd; initpwradj=:wh_normalize
 filter = dataset ∈ [:neurofinder,:fakecells] ? :meanT : :none; filterstr = "_$(filter)"
@@ -145,15 +144,15 @@ imgadmm2 = load(joinpath(subworkpath,"ADMMaudio_lowrank_nndsvd_a10_it1500_fv0.98
 imghals = load(joinpath(subworkpath,"HALSaudio_rsvd_a0.1_it100_fv0.9921731304672196_rt0.0153537_plot_WH.png"))
 
 f = Figure(resolution = (1000,900))
-ax11=GLMakie.Axis(f[1,1],title="(a) SMF (ISVD init.)", titlesize=20, aspect = DataAspect()); hidespines!(ax11)
+ax11=AMakie.Axis(f[1,1],title="(a) SMF (ISVD init.)", titlesize=20, aspect = DataAspect()); hidespines!(ax11)
 hidedecorations!(ax11)
-ax12=GLMakie.Axis(f[1,2],title="(b) SMF (NNDSVD init.)", titlesize=20, aspect = DataAspect()); hidespines!(ax12)
+ax12=AMakie.Axis(f[1,2],title="(b) SMF (NNDSVD init.)", titlesize=20, aspect = DataAspect()); hidespines!(ax12)
 hidedecorations!(ax12)
-ax21=GLMakie.Axis(f[2,1],title="(d) Compressed NMF", titlesize=20, aspect = DataAspect()); hidespines!(ax21)
+ax21=AMakie.Axis(f[2,1],title="(d) Compressed NMF", titlesize=20, aspect = DataAspect()); hidespines!(ax21)
 hidedecorations!(ax21)
-ax22=GLMakie.Axis(f[2,2],title="(e) Compressed NMF", titlesize=20, aspect = DataAspect()); hidespines!(ax22)
+ax22=AMakie.Axis(f[2,2],title="(e) Compressed NMF", titlesize=20, aspect = DataAspect()); hidespines!(ax22)
 hidedecorations!(ax22)
-ax3all=GLMakie.Axis(f[3,1:2],title="(c) HALS", titlesize=20, aspect = DataAspect()); hidespines!(ax3all)
+ax3all=AMakie.Axis(f[3,1:2],title="(c) HALS", titlesize=20, aspect = DataAspect()); hidespines!(ax3all)
 hidedecorations!(ax13)
 image!(ax11, rotr90(imgsca1)); image!(ax12, rotr90(imgsca2)); image!(ax3all, rotr90(imghals))
 image!(ax21, rotr90(imgadmm1)); image!(ax22, rotr90(imgadmm2))

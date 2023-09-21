@@ -1,7 +1,3 @@
-using Pkg
-
-Pkg.activate(".")
-
 #using MultivariateStats # for ICA
 using Images, LinearAlgebra, Printf, Colors, Interpolations, JLD2
 using FakeCells, AxisArrays, ImageCore, MappedArrays, NMF, Statistics, TiledFactorizations

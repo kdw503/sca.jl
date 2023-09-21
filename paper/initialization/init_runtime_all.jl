@@ -7,7 +7,7 @@ elseif Sys.isunix()
     workpath=ENV["MYSTORAGE"]*"/work/julia/sca"
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
-cd(workpath)
+cd(workpath); Pkg.activate(".")
 subworkpath = joinpath(workpath,"paper","initialization")
 
 include(joinpath(workpath,"setup_light.jl"))
@@ -97,7 +97,7 @@ hals_r_means = dd["rnndsvdmeans"]; hals_r_stds = dd["rnndsvdstds"]
 hals_r_upper = hals_r_means + z*hals_r_stds; hals_r_lower = hals_r_means - z*hals_r_stds
 
 fig = Figure()
-ax1 = GLMakie.Axis(fig[1, 1], xlabel = "number of components", ylabel = "time(sec)", title = "Number of cells vs. Initialization time")
+ax1 = AMakie.Axis(fig[1, 1], xlabel = "number of components", ylabel = "time(sec)", title = "Number of cells vs. Initialization time")
 
 lines!(ax1, ncellsrng, sca_means, color=mtdcolors[2], label="SVD")
 band!(ax1, ncellsrng, sca_lower, sca_upper, color=mtdcoloras[2])
@@ -166,7 +166,7 @@ hals_r_means = dd["rnndsvdmeans"]; hals_r_stds = dd["rnndsvdstds"]
 hals_r_upper = hals_r_means + z*hals_r_stds; hals_r_lower = hals_r_means - z*hals_r_stds
 
 fig = Figure(resolution = (500,400))
-ax1 = GLMakie.Axis(fig[1, 1], xlabel = "data size (Mbyte)", ylabel = "time(sec)", title = "Data size vs. Initialization time",
+ax1 = AMakie.Axis(fig[1, 1], xlabel = "data size (Mbyte)", ylabel = "time(sec)", title = "Data size vs. Initialization time",
     xtickformat = values -> ["$(value^2*8/10)" for value in values])
 
 lines!(ax1, factorrng, sca_means, color=mtdcolors[2], label="SVD")
@@ -219,7 +219,7 @@ isvdrt1ss = dd["isvdrt1ss"]; lowrankrt1ss = dd["lowrankrt1ss"]; nndsvdrt1ss = dd
 rlowrankrt1ss = dd["rlowrankrt1ss"]; rnndsvdrt1ss = dd["rnndsvdrt1ss"]
 
 fig = Figure(resolution = (500,400))
-ax1 = GLMakie.Axis(fig[1, 1], xlabel = "ncells/datasize", ylabel = "time(sec)", title = "ncells/datasize vs. Initialization time",
+ax1 = AMakie.Axis(fig[1, 1], xlabel = "ncells/datasize", ylabel = "time(sec)", title = "ncells/datasize vs. Initialization time",
     xtickformat = values -> ["$(value)" for value in values])
 fl = length(factorrng); nl = length(ncellsrng)
 cls = distinguishable_colors(fl*nl; lchoices=range(0, stop=50, length=20))

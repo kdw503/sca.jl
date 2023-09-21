@@ -7,9 +7,10 @@ elseif Sys.isunix()
     workpath=ENV["MYSTORAGE"]*"/work/julia/sca"
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
-cd(workpath)
-include(joinpath(workpath,"setup_plot.jl"))
+cd(workpath); Pkg.activate(".")
 subworkpath = joinpath(workpath,"paper","runtime")
+
+include(joinpath(workpath,"setup_plot.jl"))
 
 z = 0.5
 plottime = Inf
@@ -58,7 +59,7 @@ alpha = 0.2; cls = distinguishable_colors(10); clbs = convert.(RGBA,cls,alpha)
 
 plotlength = min(length(rng),50); plotrng = :
 fig = Figure(resolution=(400,300))
-ax = GLMakie.Axis(fig[1, 1], limits = ((0,min(0.3,plottime)), nothing), xlabel = "time(sec)", ylabel = "average fit", title = "Average Fit Value vs. Running Time")
+ax = AMakie.Axis(fig[1, 1], limits = ((0,min(0.3,plottime)), nothing), xlabel = "time(sec)", ylabel = "average fit", title = "Average Fit Value vs. Running Time")
 
 lns = Dict(); bnds=Dict()
 # for (i,(frpx, lbl)) in enumerate([("sca_sp","SMF (α=100,β=0)"),("hals_nn","HALS (α=0)"),("hals_sp_nn","HALS (α=0.1)"),
@@ -87,11 +88,11 @@ imgaf = load(joinpath(subworkpath,"avgfits.png"))
 
 labels = ["SMF","Compressed NMF","HALS NMF","Sparse PCA",]
 f = Figure(resolution = (1000,400))
-ax11=GLMakie.Axis(f[1,1],title=labels[1], aspect = DataAspect()); hidedecorations!(ax11)
-ax21=GLMakie.Axis(f[2,1],title=labels[2], aspect = DataAspect()); hidedecorations!(ax21)
-ax31=GLMakie.Axis(f[3,1],title=labels[3], aspect = DataAspect()); hidedecorations!(ax31)
-ax41=GLMakie.Axis(f[4,1],title=labels[4], aspect = DataAspect()); hidedecorations!(ax41)
-axall2=GLMakie.Axis(f[:,2], aspect = DataAspect()); hidedecorations!(axall2); hidespines!(axall2)
+ax11=AMakie.Axis(f[1,1],title=labels[1], aspect = DataAspect()); hidedecorations!(ax11)
+ax21=AMakie.Axis(f[2,1],title=labels[2], aspect = DataAspect()); hidedecorations!(ax21)
+ax31=AMakie.Axis(f[3,1],title=labels[3], aspect = DataAspect()); hidedecorations!(ax31)
+ax41=AMakie.Axis(f[4,1],title=labels[4], aspect = DataAspect()); hidedecorations!(ax41)
+axall2=AMakie.Axis(f[:,2], aspect = DataAspect()); hidedecorations!(axall2); hidespines!(axall2)
 image!(ax11, rotr90(imgsca)); image!(ax21, rotr90(imgadmm)); image!(ax31, rotr90(imghals)); image!(ax41, rotr90(imgspca))
 image!(axall2, rotr90(imgaf))
 save(joinpath(subworkpath,"compare_all_methods.png"),f)
@@ -141,7 +142,7 @@ z = quantile(Normal(), 1 - alpha / 2)
 lower_bound = y - z * se
 upper_bound = y + z * se
 
-fig = GLMakie.Figure()
+fig = AMakie.Figure()
 
 #----- Axis
 # ax1 = Axis(f[1, 1])
@@ -199,7 +200,7 @@ fig = GLMakie.Figure()
 # xminorticks = IntervalsBetween(2); xminorticks = [1,2,3,4]
 # xcale = identity, log10, sqrt, Makie.logit(logit function)
 #         Makie.Symlog10(10.0) (Symlog10 with linear scaling between -10 and 10)
-ax = GLMakie.Axis(fig[1, 1], xlabel = "x label", ylabel = "y label", title = "Title")
+ax = AMakie.Axis(fig[1, 1], xlabel = "x label", ylabel = "y label", title = "Title")
 
 #----- lines!
 lines!(ax, x, y, color=:blue, label="Plot")
@@ -231,8 +232,8 @@ Legend(f[2, 1], [lin, sca, lin], ["a line", "some dots", "line again"],
 
 
 
-f = GLMakie.Figure()
-GLMakie.Axis(f[1, 1])
+f = AMakie.Figure()
+AMakie.Axis(f[1, 1])
 
 n, m = 100, 101
 t = range(0, 1, length=m)
@@ -244,8 +245,8 @@ lines!(t, μ)              # plot mean line
 band!(t, μ + σ, μ - σ)   # plot stddev band
 
 
-f = GLMakie.Figure()
-GLMakie.Axis(f[1, 1])
+f = AMakie.Figure()
+AMakie.Axis(f[1, 1])
 
 xs = 1:0.2:10
 ys_low = -0.2 .* sin.(xs) .- 0.25
