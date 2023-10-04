@@ -28,12 +28,12 @@ else
     admm_maxiter = 4; admm_inner_maxiter = 0; admm_ls_maxiter = 0
     hals_maxiter = 4
 end
-factors = [20]
+factors = [10]
 for iter in 1:num_experiments
     @show iter; flush(stdout)
 for factor = factors
     fovsz = (40,20)
-    imgsz = (factor*fovsz[1],fovsz[2]); lengthT = factor*100
+    imgsz = (factor*fovsz[1],fovsz[2]); lengthT = factor*1000
 X, imgsz, lengthT, ncells, gtncells, datadic = load_data(dataset; imgsz=imgsz, fovsz=fovsz, lengthT=lengthT, SNR=SNR, bias=bias, useCalciumT=true,
         inhibitindices=inhibitindices, issave=false, isload=false, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
 
@@ -91,7 +91,7 @@ for (tailstr,initmethod,α,β) in [("_sp",:isvd,0.001,0.), ("_nn",:nndsvd,0.,0.0
     fprex = "sca$(factor)"
     fname = joinpath(subworkpath,"$(fprex)_a$(α)_b$(β)_af$(avgfit)_it$(maxiter)_rt$(rt2)")
     #imsave_data(dataset,fname,W3,H3,imgsz,100; saveH=false)
-    TestData.imsave_data_gt(dataset,fname*"_gt", W3,H3,gtW,gtH,imgsz,100; saveH=true)
+    TestData.imsave_data_gt(dataset,fname*"_gt", W3,H3,gtW,gtH,imgsz,100; saveH=false)
     end
     f_xs = getdata(trs,:f_x); niters = getdata(trs,:niter); totalniters = sum(niters)
     avgfitss = getdata(trs,:avgfits); fxss = getdata(trs,:fxs)

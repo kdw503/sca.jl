@@ -13,10 +13,10 @@ subworkpath = joinpath(workpath,"paper","size")
 include(joinpath(workpath,"setup_plot.jl"))
 
 z = 0.5
-factors = [1,2,4,8,20]
+factors = [10]
 for (idx,factor) = enumerate(factors)
 plottime = Inf
-for (mtdstr, submtdstrs) in [("sca",["_sp", "_sp_nn"]),("admm",["_nn"]),("hals",["_nn", "_sp_nn"])]
+for (mtdstr, submtdstrs) in [("sca",["_sp", "_sp_nn", "_nn"]),("admm",["_nn"]),("hals",["_nn", "_sp_nn"])]
     @show mtdstr
     ddstr = "dd$(mtdstr)"; ddsym = Symbol(ddstr)
 #    @eval (($ddsym)=(load("$(mtdstr)_runtime_vs_avgfits.jld2"))) # this doens't work 'mtdstr' refer global variable
@@ -61,15 +61,17 @@ alpha = 0.2; cls = distinguishable_colors(10); clbs = convert.(RGBA,cls,alpha)
 
 plotrng = Colon()
 fig = Figure(resolution=(400,300))
-maxplottimes = [0.3,0.4,0.8,3.0,100.0]
-ax = AMakie.Axis(fig[1, 1], limits = ((0,min(maxplottimes[idx],plottime)), nothing), xlabel = "time(sec)", ylabel = "average fit", title = "Average Fit Value vs. Running Time")
-
+maxplottimes = [3.0]
+ax = AMakie.Axis(fig[1, 1], limits = ((0,0.3#=min(maxplottimes[idx],plottime)=#), nothing), xlabel = "time(sec)", ylabel = "average fit")#, title = "Average Fit Value vs. Running Time")
 lns = Dict(); bnds=Dict()
 # for (i,(frpx, lbl)) in enumerate([("sca_sp","SMF (α=100,β=0)"),("hals_nn","HALS (α=0)"),("hals_sp_nn","HALS (α=0.1)"),
 #                                  ("admm_nn","Comp. NMF (α=0)"),("admm_sp","Comp. SMF (α=10)"),
 #                                  ("sca_nn","SMF (α=0,β=1000)"),("sca_sp_nn","SMF (α=100,β=1000)"),("admm_sp_nn","Comp. NMF (α=10)"),])
-for (i,(mtdstr, submtdstr, lbl, clridx)) in enumerate([("sca","_sp","SMF (α=100,β=0)",2),("sca","_sp_nn","SMF (α=100,β=1000)",5),
-                                                       ("admm","_nn","Compressed NMF",3),("hals","_nn","HALS",4)])#,("hals","_sp_nn","HALS",6)])
+# for (i,(mtdstr, submtdstr, lbl, clridx)) in enumerate([("sca","_sp","SMF (α=0.005,β=0)",2),("sca","_nn","SMF (α=0,β=5.0)",6),
+#                                                        ("sca","_sp_nn","SMF (α=0.005,β=5.0)",4),("admm","_nn","Compressed NMF",5),
+#                                                        ("hals","_nn","HALS (α=0)",3),("hals","_sp_nn","HALS (α=0.1)",7)]) # all
+for (i,(mtdstr, submtdstr, lbl, clridx)) in enumerate([("sca","_sp","SMF (α=0.005,β=0)",2),("sca","_sp_nn","SMF (α=0.005,β=5.0)",4),
+                                                       ("admm","_nn","Compressed NMF",5), ("hals","_sp_nn","HALS (α=0.1)",7)]) # selective
     # eval(print("$(frpx)_means"))
     frpx = "$(mtdstr)$(submtdstr)"
     ln = lines!(ax, eval(Symbol("$(mtdstr)rng"))[plotrng], eval(Symbol("$(frpx)_means"))[plotrng], color=mtdcolors[clridx], label=lbl)
