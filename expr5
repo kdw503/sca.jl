@@ -1,0 +1,6 @@
+#!/bin/bash
+# smjuliajob $MYSTORAGE/work/julia/sca/expr5
+# julia         file              SNR, num_experiments, sca_maxiter, hals_maxiter, admm_maxiter, hals_α
+
+lscpu >> $MYSTORAGE/work/julia/sca/paper/size/machine.txt
+/usr/local/julia/bin/julia $MYSTORAGE/work/julia/sca/paper/size/oldjl/runtime_all.jl 0 20 10 100 100 600 0.1

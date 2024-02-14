@@ -1,0 +1,138 @@
+using Pkg
+
+if Sys.iswindows()
+    workpath="C:\\Users\\kdw76\\WUSTL\\Work\\julia\\sca"
+    datapath="C:\\Users\\kdw76\\WUSTL\\Work\\Data"
+elseif Sys.isunix()
+    workpath=ENV["MYSTORAGE"]*"/work/julia/sca"
+    datapath=ENV["MYSTORAGE"]*"/work/Data"
+end
+cd(workpath); Pkg.activate(".")
+subworkpath = joinpath(workpath,"paper","initialization")
+
+include(joinpath(workpath,"setup_light.jl"))
+include(joinpath(workpath,"setup_plot.jl"))
+
+SNR=-10; factor=1; ncells=15; num_experiments=10
+imgsz = (40,20); lengthT = 1000
+for iter in 1:num_experiments
+    @show iter; flush(stdout)
+    X, imsz, lhT, ncs, gtncells, datadic = load_data(dataset; sigma=sigma, imgsz=imgsz, lengthT=lengthT, SNR=SNR, bias=bias, useCalciumT=true,
+            inhibitindices=inhibitindices, issave=false, isload=false, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
+
+    (m,n,p) = (size(X)...,ncells)
+    gtW, gtH = dataset == :fakecells ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
+
+    if subtract_bg
+        rt1cd = @elapsed Wcd, Hcd = NMF.nndsvd(X, 1, variant=:ar) # rank 1 NMF
+        NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=60, α=0), X, Wcd, Hcd)
+        LCSVD.normalizeW!(Wcd,Hcd); imsave_data(dataset,"Wr1",Wcd,Hcd,imgsz,100; signedcolors=dgwm(), saveH=false)
+        close("all"); plot(Hcd'); savefig("Hr1.png"); plot(gtH[:,inhibitindices]); savefig("Hr1_gtH.png")
+        bg = Wcd*fill(mean(Hcd),1,n); X .-= bg
+    end
+
+    # HALS
+    maxiter = hals_maxiter
+        for (tailstr,svdmethod,α) in [("_nn",:svd,0.),("_nn",:rsvd,0.)]#
+        dd = Dict()
+        if svdmethod == :svd
+            rt1cd = @elapsed Wcd0, Hcd0 = NMF.nndsvd(X, ncells, variant=:ar, initdata=svd(X))
+        else # rsvd
+            rt1cd = @elapsed Wcd0, Hcd0 = NMF.nndsvd(X, ncells, variant=:ar)
+        end
+        W1, H1 = copy(Wcd0), copy(Hcd0)#; avgfit, _ = NMF.matchedfitval(gtW,gtH, Wcd, Hcd; clamp=false); push!(avgfits,avgfit)
+        result = NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=maxiter, α=α, l₁ratio=1,
+                        tol=tol, verbose=true), X, W1, H1; gtW=gtW, gtH=gtH, maskW=maskW, maskH=maskH)
+        W1, H1 = copy(Wcd0), copy(Hcd0);
+        rt2 = @elapsed rst0 = NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=maxiter, α=α, l₁ratio=1,
+                        tol=tol, verbose=false), X, W1, H1)
+        avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W1, H1; clamp=false)
+        LCSVD.normalizeW!(W1,H1)#; W1,H1 = LCSVD.sortWHslices(W1,H1)
+        fprex = "hals$(SNR)db$(factor)f$(ncells)s$(svdmethod)"
+        fname = joinpath(subworkpath,"hals","pics","$(fprex)_a$(α)_af$(avgfit)_it$(rst0.niters)_rt$(rt2)")
+        #imsave_data(dataset,fname,W3,H3,imgsz,100; saveH=false)
+        TestData.imsave_data_gt(dataset,fname*"_gt", W1,H1,gtW,gtH,imgsz,100; saveH=false, verbose=false)
+        rt2s = collect(range(start=0,stop=rt2,length=length(result.avgfits)))
+                dd["niters"] = result.niters; dd["totalniters"] = result.niters; dd["rt1"] = rt1cd; dd["rt2s"] = rt2s
+        dd["avgfits"] = result.avgfits; dd["f_xs"] = result.objvalues;
+        if true#iter == num_experiments
+            metadata = Dict()
+            metadata["maxiter"] = maxiter; metadata["alpha"] = α
+        end
+        save(joinpath(subworkpath,"hals","$(fprex)$(tailstr)_results$(iter).jld2"),"metadata",metadata,"data",dd)
+    end
+end # for iter
+
+
+
+using Interpolations
+tailstr = "_nn"
+stat_svd=[]; stat_rsvd=[]
+rt2_min = Inf
+for svdmethod in ["rsvd", "svd"]
+    fprex="hals$(SNR)db$(factor)f$(ncells)s$(svdmethod)"
+    for iter in 1:num_experiments
+        fn = joinpath(subworkpath,"hals","$(fprex)$(tailstr)_results$(iter).jld2")
+        dd = load(fn,"data")
+        rt2s = dd["rt2s"]; @show rt2s[end]
+        rt2_min = min(rt2_min,rt2s[end])
+    end
+end
+rt2_min = floor(rt2_min, digits=4)
+rng = range(0,stop=rt2_min,length=100)
+for svdmethod in ["rsvd", "svd"]
+    afs=[]
+    fprex="hals$(SNR)db$(factor)f$(ncells)s$(svdmethod)"
+    for iter in 1:num_experiments
+        @show iter
+        dd = load(joinpath(subworkpath,"hals","$(fprex)$(tailstr)_results$(iter).jld2"))
+                rt2s = dd["data"]["rt2s"]; avgfits = dd["data"]["avgfits"]
+                        lr = length(rt2s); la = length(avgfits)
+                                lr != la && (l=min(lr,la); rt2s=rt2s[1:l]; avgfits=avgfits[1:l])
+        nodes = (rt2s,)
+        itp = Interpolations.interpolate(nodes, avgfits, Gridded(Linear()))
+        push!(afs,itp(rng))
+    end
+    avgfits = hcat(afs...)
+    means = dropdims(mean(avgfits,dims=2),dims=2)
+    stds = dropdims(std(avgfits,dims=2),dims=2)
+    svdmethod == "rsvd" && (push!(stat_rsvd,means); push!(stat_rsvd,stds))
+    svdmethod == "svd" && (push!(stat_svd,means); push!(stat_svd,stds))
+end
+fprex="hals$(SNR)db$(factor)f$(ncells)s"
+save(joinpath(subworkpath,"hals","$(fprex)_rt_vs_afs.jld2"),"rng",rng, "stat_rsvd", stat_rsvd,
+                       "stat_svd", stat_svd)
+
+for (SNR,ncells,ymin,xmax) in [(-10,15,0.5,0.2),(-10,50,0.5,0.4),(0,15,0.6,0.2),(0,50,0.6,0.4)]
+fprex="hals$(SNR)db$(factor)f$(ncells)s"
+tmppath = ""
+z = 0.5; xlimits=(0,xmax); ylimits=(ymin,1.0); mtdstr = "hals"; submtdstr = "_nn"
+dd=load(joinpath(subworkpath,tmppath,"hals","$(fprex)_rt_vs_afs.jld2"))
+
+rng = dd["rng"]; plottime = rng[end]
+
+for svdmethod in ["rsvd", "svd"]
+    dickeystr = "stat_$(svdmethod)"
+    eval(Meta.parse("$(svdmethod)_means=dd[\"stat_$(svdmethod)\"][1]"))
+    eval(Meta.parse("$(svdmethod)_stds=dd[\"stat_$(svdmethod)\"][2]"))
+    @eval ($(Symbol("$(svdmethod)_upper")) = ($(Symbol("$(svdmethod)_means")) + z*$(Symbol("$(svdmethod)_stds"))))
+    @eval ($(Symbol("$(svdmethod)_lower")) = ($(Symbol("$(svdmethod)_means")) - z*$(Symbol("$(svdmethod)_stds"))))
+end
+
+alpha = 0.2; cls = distinguishable_colors(10); clbs = convert.(RGBA,cls,alpha)
+plotrng = Colon()
+# compare LCSVD with other methods
+
+fig = Figure(resolution=(400,300))
+ax = AMakie.Axis(fig[1, 1], limits = (xlimits, ylimits), xlabel = "time(sec)", ylabel = "average fit")#, title = "Average Fit Value vs. Running Time")
+lns = Dict(); bnds=Dict()
+for (i,(svdmtdstr, lbl, clridx, linestyle)) in enumerate([("svd","NNDSVD(SVD)",2,nothing),                                                                             
+                                                          ("rsvd","NNDSVD(RSVD)",3,nothing)]) # all                                                                    
+    frpx = "$(mtdstr)$(submtdstr)"                                                                                                                             
+    ln = lines!(ax, rng[plotrng], eval(Symbol("$(svdmtdstr)_means"))[plotrng], color=mtdcolors[clridx], label=lbl, linestyle=linestyle)                        
+    bnd = band!(ax, rng[plotrng], eval(Symbol("$(svdmtdstr)_lower"))[plotrng], eval(Symbol("$(svdmtdstr)_upper"))[plotrng], color=mtdcoloras[clridx])          
+    lns["$(svdmtdstr)_line"] = ln; bnds["$(svdmtdstr)_band"] = bnd;                                                                                            
+end
+axislegend(ax, labelsize=15, position = :rb) # halign = :left, valign = :top
+save(joinpath(subworkpath,"avgfits$(SNR)db$(factor)f$(ncells)s_all.png"),fig,px_per_unit=2)
+end
