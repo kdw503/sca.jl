@@ -13,21 +13,31 @@ subworkpath = joinpath(workpath,"paper","avgfit_measure")
 include(joinpath(workpath,"setup_plot.jl"))
 include(joinpath(workpath,"utils.jl"))
 
+dataset = :fakecells; inhibitindices=0; bias=0.1
+imgsz = (40,20); lengthT = 1000; sigma = 5.0; SNR = 0
+
+X, imsz, lhT, ncs, gtncells, datadic = load_data(dataset; sigma=sigma, imgsz=imgsz, lengthT=lengthT, SNR=SNR, bias=bias, useCalciumT=true,
+        inhibitindices=inhibitindices, issave=false, isload=false, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
+gtW, gtH = (datadic["gtW"], datadic["gtH"])
+
 #======= Ground truth and average fit measure =======#
 cls = distinguishable_colors(10)
-imggt = load(joinpath(subworkpath,"images","GT_W.png"))
-imgaf1 = load(joinpath(subworkpath,"images","SCA_a100_af0.840_pen774.31_it2_rt14.667.png"))
-imgaf2 = load(joinpath(subworkpath,"images","SCA_a100_af0.941_pen742.83_it3_rt0.0486.png"))
-imgaf3 = load(joinpath(subworkpath,"images","SCA_a100_af0.964_pen719.25_it10_rt0.0799.png"))
+imggt = load(joinpath(subworkpath,"GT_W.png"))
+imgaf1 = load(joinpath(subworkpath,"SCA_a100_af0.840_pen774.31_it2_rt14.667.png"))
+imgaf2 = load(joinpath(subworkpath,"SCA_a100_af0.941_pen742.83_it3_rt0.0486.png"))
+imgaf3 = load(joinpath(subworkpath,"SCA_a100_af0.964_pen719.25_it10_rt0.0799.png"))
 # scainhibitindices = (bias == 0.5) && (subtract_bg == false) ? 8 : inhibitindices
 labels = ["cell$(i)" for i in collect(1:7)]
-f = Figure(resolution = (1100,270))
+f = Figure(resolution = (1050,250))
 ax12=AMakie.Axis(f[1,2],title="(a) Cells", width=200, aspect = DataAspect()); hidedecorations!(ax12)
 ax13=AMakie.Axis(f[1,3:4],title="(b) Activities of cells",xlabel="time index")
 ax21=AMakie.Axis(f[2,1],title="(c)", width=10, aspect = DataAspect()); hidedecorations!(ax21); hidespines!(ax21)
-ax22=AMakie.Axis(f[2,2],title="AF=0.840, penalty=774.31", width=300, aspect = DataAspect()); hidedecorations!(ax22)
-ax23=AMakie.Axis(f[2,3],title="AF=0.941, penalty=742.83", width=300, aspect = DataAspect()); hidedecorations!(ax23)
-ax24=AMakie.Axis(f[2,4],title="AF=0.964, penalty=719.25", width=300, aspect = DataAspect()); hidedecorations!(ax24)
+#ax22=AMakie.Axis(f[2,2],title="AF=0.840, penalty=774.31", width=300, aspect = DataAspect()); hidedecorations!(ax22)
+ax22=AMakie.Axis(f[2,2],title="Average fit = 0.840", width=300, aspect = DataAspect()); hidedecorations!(ax22)
+#ax23=AMakie.Axis(f[2,3],title="AF=0.941, penalty=742.83", width=300, aspect = DataAspect()); hidedecorations!(ax23)
+ax23=AMakie.Axis(f[2,3],title="Average fit = 0.941", width=300, aspect = DataAspect()); hidedecorations!(ax23)
+#ax24=AMakie.Axis(f[2,4],title="AF=0.964, penalty=719.25", width=300, aspect = DataAspect()); hidedecorations!(ax24)
+ax24=AMakie.Axis(f[2,4],title="Average fit = 0.964", width=300, aspect = DataAspect()); hidedecorations!(ax24)
 image!(ax12, rotr90(imggt)); image!(ax22, rotr90(imgaf1)); image!(ax23, rotr90(imgaf2)); image!(ax24, rotr90(imgaf3))
 lin = [lines!(ax13,hd,color=cls[i],label=labels[i]) for (i,hd) in enumerate(eachcol(gtH))]
 # axislegend(ax12,position=:rt)

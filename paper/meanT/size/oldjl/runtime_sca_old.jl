@@ -31,7 +31,7 @@ else
     admm_maxiter = 1; admm_inner_maxiter = 0; admm_ls_maxiter = 0
     hals_maxiter = 1; maskth=0.25
 end
-imgsz0 = (40,20); factors = [1]
+imgsz0 = (40,20); factors = [1]; iter=1; factor=1
 for iter in 1:num_experiments
     @show iter; flush(stdout)
 for factor = factors

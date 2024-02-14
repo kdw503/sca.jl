@@ -1,3 +1,25 @@
 #!/bin/bash
-# julia         file              dataset,   SNRs, initmethod, maxiter, αs, βs, optimmethod,   reg, sd_group, useRelaxedL1
-julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:fakecells] [0] :nndsvd 500 [100] [0] :SB_lbfgs :W1M2 :component false
+# export resource='select[model==Intel_Xeon_Gold6242CPU280GHz && mem>32000 && tmp>2] rusage[mem=32000, tmp=2]'
+# smjuliajob -R "$resource" $MYSTORAGE/work/julia/sca/expr3
+# julia         file              SNR, num_experiments, sca_maxiter, hals_maxiter, admm_maxiter
+export jlexec=/usr/local/julia/bin/julia
+export jlfile=$MYSTORAGE/work/julia/sca/paper/runtime_all.jl
+lscpu >> $MYSTORAGE/work/julia/sca/paper/size/machine.txt
+$jlexec $jlfile \"size\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 1 50 20 1 15 150 250 0.1 1600
+$jlexec $jlfile \"size\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 1 50 20 5 15 120 200 0.1 1200
+$jlexec $jlfile \"size\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 1 50 20 10 15 80 80 0.5 800
+
+# export jlpath=/usr/local/julia/bin/julia
+# export jlfile=$MYSTORAGE/work/julia/sca/paper/runtime_all.jl
+# export job_group=/kim503/job_group0
+# export resource='select[model==Intel_Xeon_Gold6242CPU280GHz && mem>32000 && tmp>2] rusage[mem=32000, tmp=2]'
+# export mem_kill_th='32GB'
+# bgadd -L 30 $job_group
+# # bjgroup -s $job_group
+# # bkill -g {job group name} 0 # kill all the jobs in the job group
+# # for iter in {1..50}; do   # {start..stop..step}
+# for iter in {1..50}; do
+#     smjuliajob -g $job_group -R "$resource" -M $mem_kill_th -J "ft1_$iter" $jlpath $jlfile \"size\" $iter 0 1 15 150 true true 250 0.1 1600
+#     smjuliajob -g $job_group -R "$resource" -M $mem_kill_th -J "ft5_$iter" $jlpath $jlfile \"size\" $iter 0 5 15 100 true true 100 0.1 600
+#     smjuliajob -g $job_group -R "$resource" -M $mem_kill_th -J "ft10_$iter" $jlpath $jlfile \"size\" $iter 0 10 15 50 true true 50 0.1 400
+# done

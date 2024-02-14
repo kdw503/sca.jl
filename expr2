@@ -1,3 +1,23 @@
 #!/bin/bash
-# julia         file              dataset,   SNRs, initmethod, maxiter, αs, βs, optimmethod,   reg, sd_group, useRelaxedL1
-julia $MYSTORAGE/work/julia/sca/scaexpr.jl [:fakecells] [0] :nndsvd 500 [100] [0] :SB_lbfgs :W1M2 :component false
+# export resource='select[model==Intel_Xeon_Gold6242CPU280GHz && mem>32000 && tmp>2] rusage[mem=32000, tmp=2]'
+# smjuliajob -R "$resource" $MYSTORAGE/work/julia/sca/expr3
+# julia         file              SNR, num_experiments, sca_maxiter, hals_maxiter, admm_maxiter
+export jlexec=/usr/local/julia/bin/julia
+export jlfile=$MYSTORAGE/work/julia/sca/paper/runtime_all.jl
+lscpu >> $MYSTORAGE/work/julia/sca/paper/ncells/machine.txt
+$jlexec $jlfile \"ncells\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 1 50 20 1 10 200 300 0.1 1600
+$jlexec $jlfile \"ncells\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 1 50 20 1 20 150 200 0.1 1200
+$jlexec $jlfile \"ncells\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 1 50 20 1 30 180 200 0.1 1000
+$jlexec $jlfile \"ncells\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 1 50 20 1 50 300 400 0.1 1600
+
+# export juliapath=/usr/local/julia/bin/julia
+# export workpath=$MYSTORAGE/work/julia/sca
+# export job_group=/kim503/job_group0
+# bgadd -L 30 $job_group
+# # bjgroup -s $job_group
+# for iter in {1..50}; do
+#     smjuliajob -g $job_group -J "nc10_$iter" $juliapath $workpath/paper/runtime_all.jl \"ncells\" $iter 0 1 10 150 true true 150 0.1 800
+#     smjuliajob -g $job_group -J "nc20_$iter" $juliapath $workpath/paper/runtime_all.jl \"ncells\" $iter 0 1 20 150 true true 150 0.1 800
+#     smjuliajob -g $job_group -J "nc30_$iter" $juliapath $workpath/paper/runtime_all.jl \"ncells\" $iter 0 1 30 150 true true 150 0.1 800
+#     smjuliajob -g $job_group -J "nc50_$iter" $juliapath $workpath/paper/runtime_all.jl \"ncells\" $iter 0 1 50 150 true true 150 0.1 800
+# done

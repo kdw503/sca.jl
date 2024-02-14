@@ -1,2 +1,25 @@
 #!/bin/bash
-/usr/local/julia/bin/julia $MYSTORAGE/work/julia/sca/runtime_sca.jl
+# export resource='select[model==Intel_Xeon_Gold6242CPU280GHz && mem>32000 && tmp>2] rusage[mem=32000, tmp=2]'
+# smjuliajob -R "$resource" $MYSTORAGE/work/julia/sca/expr1
+# julia         file             dir_name methods num_expriments SNR factor ncells lcsvd_maxiter hals_maxiter hals_α compnmf_maxiter
+export jlexec=/usr/local/julia/bin/julia
+export jlfile=$MYSTORAGE/work/julia/sca/paper/runtime_all.jl
+lscpu >> $MYSTORAGE/work/julia/sca/paper/SNR/machine.txt
+$jlexec $jlfile \"SNR\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 1 50 0 1 15 150 150 0.1 1200
+$jlexec $jlfile \"SNR\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 1 50 5 1 15 200 200 0.1 1500
+$jlexec $jlfile \"SNR\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 1 50 10 1 15 200 200 0.1 1500
+$jlexec $jlfile \"SNR\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 1 50 20 1 15 200 200 0.1 1500
+$jlexec $jlfile \"SNR\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 1 50 30 1 15 200 200 0.1 1500
+$jlexec $jlfile \"SNR\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 1 50 40 1 15 200 200 0.1 1500
+# $jlexec $jlfile \"SNR\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"lcsvd\",\"lcsvd_LPF\",\"hals\",\"compnmf\"] 2 0 1 15 50 50 0.1 400
+
+# export juliapath=/usr/local/julia/bin/julia
+# export workpath=$MYSTORAGE/work/julia/sca
+# export job_group=/kim503/job_group0
+# bgadd -L 30 $job_group
+# # bjgroup -s $job_group
+# for iter in {1..50}; do
+#     smjuliajob -g $job_group -J "SNR-10_$iter" $juliapath $workpath/paper/runtime_all.jl \"SNR\" $iter -10 1 15 150 false false 150 0.1 800
+#     smjuliajob -g $job_group -J "SNR0_$iter" $juliapath $workpath/paper/runtime_all.jl \"SNR\" $iter 0 1 15 150 false false 150 0.1 800
+#     smjuliajob -g $job_group -J "SNR10_$iter" $juliapath $workpath/paper/runtime_all.jl \"SNR\" $iter 10 1 15 200 false false 200 0.1 1000
+# done
