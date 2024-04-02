@@ -8,24 +8,19 @@ elseif Sys.isunix()
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
 cd(workpath); Pkg.activate(".")
-subworkpath = joinpath(workpath,"paper","size")
+subworkpath = joinpath(workpath,"paper","tsvd")
 
 include(joinpath(workpath,"setup_light.jl"))
 include(joinpath(workpath,"setup_plot.jl"))
 using Interpolations
 
-SNR = 0; num_experiments = 50; ncells=15; factors=["0.7","1","5","10"]
-itp_time_resol=1000
+SNRs = [-10,0,20]; num_experiments = 50; ncells=15; factor=1
 
-# for (prefix, initmethods, tailstrs) in [("lcsvd", ["isvd","isvd", "nndsvd"], ["_sp","_sp_nn", "_nn"]),
-#     ("lcsvd_LPF", ["isvd","isvd", "nndsvd"], ["_sp","_sp_nn", "_nn"]),
-#     ("lcsvd_precon", ["isvd","isvd", "nndsvd"], ["_sp","_sp_nn", "_nn"]),
-#     ("lcsvd_precon_LPF", ["isvd","isvd", "nndsvd"], ["_sp","_sp_nn", "_nn"]),
-#     ("hals",["nndsvd","nndsvd"],["_nn","_sp_nn"]),("compnmf",["lowrank_nndsvd"],["_nn"])]
 for (prefix, initmethods, tailstrs) in [("lcsvd", ["isvd","isvd", "nndsvd"], ["_sp","_sp_nn", "_nn"]),
+                ("lcsvd_tsvd", ["tsvd","tsvd", "nndsvd"], ["_sp","_sp_nn", "_nn"]),
                 ("lcsvd_precon", ["isvd","isvd", "nndsvd"], ["_sp","_sp_nn", "_nn"]),
-                ("hals",["nndsvd","nndsvd"],["_nn","_sp_nn"]),("compnmf",["lowrank_nndsvd"],["_nn"])]
-    for factor = factors
+                ("lcsvd_precon_tsvd", ["tsvd","tsvd", "nndsvd"], ["_sp","_sp_nn", "_nn"])]
+    for SNR = SNRs
         rt2_min = Inf
         for (initmethod,tailstr) in zip(initmethods,tailstrs)
             fprex="$(prefix)$(SNR)db$(factor)f$(ncells)s$(initmethod)"
@@ -37,7 +32,7 @@ for (prefix, initmethods, tailstrs) in [("lcsvd", ["isvd","isvd", "nndsvd"], ["_
             end
         end
         rt2_min = floor(rt2_min, digits=4)
-        rng = range(0,stop=rt2_min,length=itp_time_resol)
+        rng = range(0,stop=rt2_min,length=100)
         
         stat_nn=[]; stat_sp=[]; stat_sp_nn=[]
         for (initmethod,tailstr) in zip(initmethods,tailstrs)
@@ -67,17 +62,13 @@ for (prefix, initmethods, tailstrs) in [("lcsvd", ["isvd","isvd", "nndsvd"], ["_
 end
 
 tmppath = ""
-z = 0.5; ylimits=(0.5,1.01); resol=(800,600); fntsize1 = 30; fntsize2 = 30
-for (idx,factor) = enumerate(factors)
+z = 0.5; ylimits=[(0.5,0.9),(0.6,1.0),(0.6,1.0)]
+for (idx,SNR) = enumerate(SNRs)
 plottime = Inf
-# for (mtdstr, submtdstrs) in [("lcsvd",["_sp", "_sp_nn", "_nn"]),
-#     ("lcsvd_LPF",["_sp", "_sp_nn", "_nn"]),
-#     ("lcsvd_precon",["_sp", "_sp_nn", "_nn"]),
-#     ("lcsvd_precon_LPF",["_sp", "_sp_nn", "_nn"]),
-#     ("compnmf",["_nn"]),("hals",["_nn", "_sp_nn"])]
 for (mtdstr, submtdstrs) in [("lcsvd",["_sp", "_sp_nn", "_nn"]),
+                            ("lcsvd_tsvd",["_sp", "_sp_nn", "_nn"]),
                             ("lcsvd_precon",["_sp", "_sp_nn", "_nn"]),
-                            ("compnmf",["_nn"]),("hals",["_nn", "_sp_nn"])]
+                            ("lcsvd_precon_tsvd",["_sp", "_sp_nn", "_nn"])]
     @show mtdstr
     fprex="$(mtdstr)$(SNR)db$(factor)f$(ncells)s"
     ddstr = "dd$(mtdstr)"; ddsym = Symbol(ddstr)
@@ -100,78 +91,20 @@ end
 alpha = 0.2; cls = distinguishable_colors(10); clbs = convert.(RGBA,cls,alpha)
 plotrng = Colon()
 
-# # compare LCSVD with different options (_sp)
-# fig = Figure(resolution=(400,300))
-# maxplottimes = [0.2,2.4,0.6]
-# ax = AMakie.Axis(fig[1, 1], limits = ((0,maxplottimes[idx]#=min(maxplottimes[idx],plottime)=#), ylimits), xlabel = "time(sec)", ylabel = "average fit")#, title = "Average Fit Value vs. Running Time")
-# lns = Dict(); bnds=Dict()
-# for (i,(mtdstr, submtdstr, lbl, clridx, linestyle)) in enumerate([("lcsvd","_sp","no precond",2,nothing),
-#                                                                 ("lcsvd_LPF","_sp","no precond LPF",6,nothing),
-#                                                                 ("lcsvd_precon","_sp","precond",4,nothing),
-#                                                                 ("lcsvd_precon_LPF","_sp","precond LPF",5,nothing)]) # all
-#     # eval(print("$(frpx)_means"))
-#     frpx = "$(mtdstr)$(submtdstr)"
-#     ln = lines!(ax, eval(Symbol("$(mtdstr)rng"))[plotrng], eval(Symbol("$(frpx)_means"))[plotrng], color=mtdcolors[clridx], label=lbl, linestyle=linestyle)
-#     bnd = band!(ax, eval(Symbol("$(mtdstr)rng"))[plotrng], eval(Symbol("$(frpx)_lower"))[plotrng], eval(Symbol("$(frpx)_upper"))[plotrng], color=mtdcoloras[clridx])
-#     lns["$(frpx)_line"] = ln; bnds["$(frpx)_band"] = bnd;
-# end
-# axislegend(ax, position = :rb) # halign = :left, valign = :top
-# save(joinpath(subworkpath,"avgfits_sp_$(SNR)db$(factor)f$(ncells)s_all.png"),fig,px_per_unit=2)
-
-# # compare LCSVD with different options (_nn)
-# fig = Figure(resolution=(400,300))
-# maxplottimes = [0.14,2.4,0.6]
-# ax = AMakie.Axis(fig[1, 1], limits = ((0,maxplottimes[idx]#=min(maxplottimes[idx],plottime)=#), ylimits), xlabel = "time(sec)", ylabel = "average fit")#, title = "Average Fit Value vs. Running Time")
-# lns = Dict(); bnds=Dict()
-# for (i,(mtdstr, submtdstr, lbl, clridx, linestyle)) in enumerate([("lcsvd","_nn","no precond",2,nothing),
-#                                                                 ("lcsvd_LPF","_nn","no precond LPF",6,nothing),
-#                                                                 ("lcsvd_precon","_nn","precond",4,nothing),
-#                                                                 ("lcsvd_precon_LPF","_nn","precond LPF",5,nothing)]) # all
-#     # eval(print("$(frpx)_means"))
-#     frpx = "$(mtdstr)$(submtdstr)"
-#     ln = lines!(ax, eval(Symbol("$(mtdstr)rng"))[plotrng], eval(Symbol("$(frpx)_means"))[plotrng], color=mtdcolors[clridx], label=lbl, linestyle=linestyle)
-#     bnd = band!(ax, eval(Symbol("$(mtdstr)rng"))[plotrng], eval(Symbol("$(frpx)_lower"))[plotrng], eval(Symbol("$(frpx)_upper"))[plotrng], color=mtdcoloras[clridx])
-#     lns["$(frpx)_line"] = ln; bnds["$(frpx)_band"] = bnd;
-# end
-
-# axislegend(ax, position = :rb) # halign = :left, valign = :top
-# save(joinpath(subworkpath,"avgfits_nn_$(SNR)db$(factor)f$(ncells)s_all.png"),fig,px_per_unit=2)
-
-# # compare LCSVD with different options (_sp_nn)
-# fig = Figure(resolution=(400,300))
-# maxplottimes = [0.2,2.4,0.7]
-# ax = AMakie.Axis(fig[1, 1], limits = ((0,maxplottimes[idx]#=min(maxplottimes[idx],plottime)=#), ylimits), xlabel = "time(sec)", ylabel = "average fit")#, title = "Average Fit Value vs. Running Time")
-# lns = Dict(); bnds=Dict()
-# for (i,(mtdstr, submtdstr, lbl, clridx, linestyle)) in enumerate([("lcsvd","_sp_nn","no precond",2,nothing),
-#                                                                 ("lcsvd_LPF","_sp_nn","no precond LPF",6,nothing),
-#                                                                 ("lcsvd_precon","_sp_nn","precond",4,nothing),
-#                                                                 ("lcsvd_precon_LPF","_sp_nn","precond LPF",5,nothing)]) # all
-#     # eval(print("$(frpx)_means"))
-#     frpx = "$(mtdstr)$(submtdstr)"
-#     ln = lines!(ax, eval(Symbol("$(mtdstr)rng"))[plotrng], eval(Symbol("$(frpx)_means"))[plotrng], color=mtdcolors[clridx], label=lbl, linestyle=linestyle)
-#     bnd = band!(ax, eval(Symbol("$(mtdstr)rng"))[plotrng], eval(Symbol("$(frpx)_lower"))[plotrng], eval(Symbol("$(frpx)_upper"))[plotrng], color=mtdcoloras[clridx])
-#     lns["$(frpx)_line"] = ln; bnds["$(frpx)_band"] = bnd;
-# end
-
-# axislegend(ax, position = :rb) # halign = :left, valign = :top
-# save(joinpath(subworkpath,"avgfits_sp_nn_$(SNR)db$(factor)f$(ncells)s_all.png"),fig,px_per_unit=2)
-
 # compare LCSVD with other methods
-fig = Figure(resolution=resol)
-maxplottimes = [0.2,0.3,2.0,2.7]
-ax = AMakie.Axis(fig[1, 1], limits = ((0,maxplottimes[idx]#=min(maxplottimes[idx],plottime)=#), ylimits),
-    xlabel = "time(sec)", xlabelsize = fntsize2, xticklabelsize = fntsize2,
-    ylabel = "average fit", ylabelsize = fntsize2, yticklabelsize = fntsize2)#, title = "Average Fit Value vs. Running Time")
+fig = Figure(resolution=(400,300))
+maxplottimes = [0.2,0.2,0.3]
+ax = AMakie.Axis(fig[1, 1], limits = ((0,maxplottimes[idx]#=min(maxplottimes[idx],plottime)=#), ylimits[idx]), xlabel = "time(sec)", ylabel = "average fit")#, title = "Average Fit Value vs. Running Time")
 lns = Dict(); bnds=Dict()
 # for (i,(frpx, lbl)) in enumerate([("sca_sp","LCSVD (α=100,β=0)"),("hals_nn","HALS (α=0)"),("hals_sp_nn","HALS (α=0.1)"),
 #                                  ("admm_nn","Comp. NMF (α=0)"),("admm_sp","Comp. LCSVD (α=10)"),
 #                                  ("sca_nn","LCSVD (α=0,β=1000)"),("sca_sp_nn","LCSVD (α=100,β=1000)"),("admm_sp_nn","Comp. NMF (α=10)"),])
-for (i,(mtdstr, submtdstr, lbl, clridx, linestyle)) in enumerate([("lcsvd_precon","_sp","PCB precond (α=0.005,β=0)",2,nothing),
-                                                                  #("lcsvd_precon","_nn","LCSVD precond (α=0,β=5.0)",6,:dashdot),
-                                                                  ("lcsvd","_sp_nn","PCB (α=0.005,β=5.0)",4,:dash),
-                                                                  ("compnmf","_nn","Compressed NMF",5,nothing),
-                                                                  ("hals","_nn","HALS (α=0)",3,nothing),
-                                                                  ("hals","_sp_nn","HALS (α=0.1)",7,:dash)]) # all
+for (i,(mtdstr, submtdstr, lbl, clridx, linestyle)) in enumerate([("lcsvd_precon","_sp","LCSVD precond ISVD (α=0.005,β=0)",2,nothing),
+                                                                  ("lcsvd_precon_tsvd","_sp","LCSVD precond TSVD (α=0,β=5.0)",2,:dashdot),
+                                                                  ("lcsvd","_sp_nn","LCSVD ISVD (α=0.005,β=5.0)",5,nothing),
+                                                                  ("lcsvd_tsvd","_sp_nn","LCSVD TSVD (α=0.005,β=5.0)",5,:dash),
+                                                                  ("lcsvd_precon","_nn","LCSVD precond ISVD (α=0,β=5.0)",7,nothing),
+                                                                  ("lcsvd_precon_tsvd","_nn","LCSVD precond TSVD (α=0,β=5.0)",7,:dash)]) # all
 # for (i,(mtdstr, submtdstr, lbl, clridx)) in enumerate([("lcsvd","_sp","LCSVD (α=0.005,β=0)",2),("lcsvd","_sp_nn","LCSVD (α=0.005,β=5.0)",4),
 #                                                        ("compnmf","_nn","Compressed NMF",5), ("hals","_sp_nn","HALS (α=0.1)",7)]) # selective
     # eval(print("$(frpx)_means"))
@@ -181,10 +114,10 @@ for (i,(mtdstr, submtdstr, lbl, clridx, linestyle)) in enumerate([("lcsvd_precon
     lns["$(frpx)_line"] = ln; bnds["$(frpx)_band"] = bnd;
 end
 
-axislegend(ax, labelsize=fntsize1, position = :rb) # halign = :left, valign = :top
+axislegend(ax, labelsize=10, position = :rb) # halign = :left, valign = :top
 save(joinpath(subworkpath,"avgfits$(SNR)db$(factor)f$(ncells)s_all.png"),fig,px_per_unit=2)
 
-end # for factor
+end # for SNR
 
 
 

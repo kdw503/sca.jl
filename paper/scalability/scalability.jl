@@ -85,15 +85,15 @@ g2 = f[2, 1] = GridLayout()
 g3 = f[3, 1] = GridLayout()
 
 # Panel SNR
+fname = joinpath(subworkpath, "SNR", "avgfits20db1f15s_all.png")
+axc=AMakie.Axis(g1[1,1], title="(a) SNR = 20dB", titlesize=fontsize, aspect = DataAspect())
+hidedecorations!(axc, label=false); hidespines!(axc); image!(axc, rotr90(load(fname)))
 fname = joinpath(subworkpath, "SNR", "avgfits-10db1f15s_all.png")
-axa=AMakie.Axis(g1[1,1], title="(a) SNR = -10dB", titlesize=fontsize, aspect = DataAspect())
+axa=AMakie.Axis(g1[1,2], title="(b) SNR = -10dB", titlesize=fontsize, aspect = DataAspect())
 hidedecorations!(axa, label=false); hidespines!(axa); image!(axa, rotr90(load(fname)))
 fname = joinpath(subworkpath, "SNRwPP", "avgfits-10db1f15s_all.png")
-axb=AMakie.Axis(g1[1,2], title="(b) SNR = -10dB (with preprocessing)", titlesize=fontsize, aspect = DataAspect())
+axb=AMakie.Axis(g1[1,3], title="(c) SNR = -10dB (with preprocessing)", titlesize=fontsize, aspect = DataAspect())
 hidedecorations!(axb, label=false); hidespines!(axb); image!(axb, rotr90(load(fname)));
-fname = joinpath(subworkpath, "SNR", "avgfits20db1f15s_all.png")
-axc=AMakie.Axis(g1[1,3], title="(c) SNR = 20dB", titlesize=fontsize, aspect = DataAspect())
-hidedecorations!(axc, label=false); hidespines!(axc); image!(axc, rotr90(load(fname)))
 rowsize!(g1,1,rowsize); colgap!(g1,0)
 
 # Panel NOC
@@ -109,15 +109,15 @@ hidedecorations!(axf, label=false); hidespines!(axf); image!(axf, rotr90(load(fn
 rowsize!(g2,1,rowsize); colgap!(g2,0)
 
 # Panel size
-fname = joinpath(subworkpath, "size", "avgfits0db1f15s_all.png")
-axj=AMakie.Axis(g3[1,1], title="(g) size = 40 × 20 × 1000", titlesize=fontsize, aspect = DataAspect())
-hidedecorations!(axj, label=false); hidespines!(axj); image!(axj, rotr90(load(fname)));
+fname = joinpath(subworkpath, "size", "avgfits0db10f15s_all.png")
+axl=AMakie.Axis(g3[1,1], title="(g) size = 120 × 60 × 10000", titlesize=fontsize, aspect = DataAspect())
+hidedecorations!(axl, label=false); hidespines!(axl); image!(axl, rotr90(load(fname)));
 fname = joinpath(subworkpath, "size", "avgfits0db5f15s_all.png")
 axk=AMakie.Axis(g3[1,2], title="(h) size = 80 × 40 × 5000", titlesize=fontsize, aspect = DataAspect())
 hidedecorations!(axk, label=false); hidespines!(axk); image!(axk, rotr90(load(fname)))
-fname = joinpath(subworkpath, "size", "avgfits0db10f15s_all.png")
-axl=AMakie.Axis(g3[1,3], title="(i) size = 120 × 60 × 10000", titlesize=fontsize, aspect = DataAspect())
-hidedecorations!(axl, label=false); hidespines!(axl); image!(axl, rotr90(load(fname)));
+fname = joinpath(subworkpath, "size", "avgfits0db1f15s_all.png")
+axj=AMakie.Axis(g3[1,3], title="(i) size = 40 × 20 × 1000", titlesize=fontsize, aspect = DataAspect())
+hidedecorations!(axj, label=false); hidespines!(axj); image!(axj, rotr90(load(fname)));
 rowsize!(g3,1,rowsize); colgap!(g3,0)
 rowgap!(f.layout,0)
 

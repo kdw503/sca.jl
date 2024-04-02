@@ -104,9 +104,9 @@ for (prefix,tailstr,initmethod,β) = [("lcsvd_precon","_sp",:isvd,0.),("lcsvd_pr
     makepositive && LCSVD.flip2makepos!(Wlc,Hlc)
     Wlc .*= 10; Hlc ./=10; W3,H3 = LCSVD.sortWHslices(Wlc,Hlc)
     fprex = "$(prefix)$(tailstr)_$(initmethod)"
-    fname = joinpath(subworkpath,"$(fprex)_a$(α)_b$(β)_fv$(fitval)_it$(rst0.niters)_rt$(rt2)")
+    fname = joinpath(subworkpath,"$(fprex)_aw$(α1)_ah$(α2)_b$(β)_fv$(fitval)_it$(rst0.niters)_rt$(rt2)")
     fig = TestData.plotWH_data(dataset,fname,W3,H3; space=10, issave=true)
-    fname = joinpath(subworkpath,"$(fprex)_a$(α)_b$(β)_fv$(fitval)_it$(rst0.niters)_rt$(rt2)_perm")
+    fname = joinpath(subworkpath,"$(fprex)_aw$(α1)_ah$(α2)_b$(β)_fv$(fitval)_it$(rst0.niters)_rt$(rt2)_perm")
     fig = TestData.plotWH_data(dataset,fname,W3[:,[2,1,3]],H3[[2,1,3],:]; space=10, issave=true)
 end
 
@@ -204,20 +204,20 @@ fname = joinpath(subworkpath,prefix,"$(fprex)_a$(α)_fv$(fitval)_it$(maxiter)_rt
 
 
 # Figure
-imglcsvd1 = load(joinpath(subworkpath,"audio_lcsvd_sp_isvd_a0.005_b0.0.png"))
-imglcsvd2 = load(joinpath(subworkpath,"audio_lcsvd_sp_nn_isvd_a0.005_b5.0.png"))
+imglcsvd1 = load(joinpath(subworkpath,"audio_lcsvd_sp_isvd_ah0.005_b0.0.png"))
+imglcsvd2 = load(joinpath(subworkpath,"audio_lcsvd_nn_nndsvd_a0_b5.0.png"))
 imgadmm = load(joinpath(subworkpath,"audio_compnmf_nndsvd.png"))
-imghals = load(joinpath(subworkpath,"audio_hals_rsvd_a0.1.png"))
+imghals = load(joinpath(subworkpath,"audio_hals_rsvd_a0.png"))
 
 fontsize = 30
 f = Figure(resolution = (2000,1100))
-ax11=AMakie.Axis(f[1,1],title="(a) LCSVD (α=0.005 β=0)", titlesize=fontsize, aspect = DataAspect()); hidespines!(ax11)
+ax11=AMakie.Axis(f[1,1],title="(a) LCSVD (Sparsity)", titlesize=fontsize, aspect = DataAspect()); hidespines!(ax11)
 hidedecorations!(ax11)
-ax12=AMakie.Axis(f[1,2],title="(b) LCSVD (α=0.005 β=5.0)", titlesize=fontsize, aspect = DataAspect()); hidespines!(ax12)
+ax12=AMakie.Axis(f[1,2],title="(b) LCSVD (Nonnegativity)", titlesize=fontsize, aspect = DataAspect()); hidespines!(ax12)
 hidedecorations!(ax12)
 ax21=AMakie.Axis(f[2,1],title="(c) Compressed NMF", titlesize=fontsize, aspect = DataAspect()); hidespines!(ax21)
 hidedecorations!(ax21)
-ax22=AMakie.Axis(f[2,2],title="(d) HALS NMF (α=0.1)", titlesize=fontsize, aspect = DataAspect()); hidespines!(ax22)
+ax22=AMakie.Axis(f[2,2],title="(d) HALS NMF", titlesize=fontsize, aspect = DataAspect()); hidespines!(ax22)
 hidedecorations!(ax22)
 image!(ax11, rotr90(imglcsvd1)); image!(ax12, rotr90(imglcsvd2))
 image!(ax21, rotr90(imgadmm)); image!(ax22, rotr90(imghals))

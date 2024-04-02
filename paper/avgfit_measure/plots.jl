@@ -22,26 +22,35 @@ gtW, gtH = (datadic["gtW"], datadic["gtH"])
 
 #======= Ground truth and average fit measure =======#
 cls = distinguishable_colors(10)
+imgblk = load(joinpath(subworkpath,"fakecells_block.png"))
 imggt = load(joinpath(subworkpath,"GT_W.png"))
 imgaf1 = load(joinpath(subworkpath,"SCA_a100_af0.840_pen774.31_it2_rt14.667.png"))
 imgaf2 = load(joinpath(subworkpath,"SCA_a100_af0.941_pen742.83_it3_rt0.0486.png"))
 imgaf3 = load(joinpath(subworkpath,"SCA_a100_af0.964_pen719.25_it10_rt0.0799.png"))
 # scainhibitindices = (bias == 0.5) && (subtract_bg == false) ? 8 : inhibitindices
 labels = ["cell$(i)" for i in collect(1:7)]
-f = Figure(resolution = (1050,250))
-ax12=AMakie.Axis(f[1,2],title="(a) Cells", width=200, aspect = DataAspect()); hidedecorations!(ax12)
-ax13=AMakie.Axis(f[1,3:4],title="(b) Activities of cells",xlabel="time index")
-ax21=AMakie.Axis(f[2,1],title="(c)", width=10, aspect = DataAspect()); hidedecorations!(ax21); hidespines!(ax21)
+f = Figure(resolution = (1000,625))
+gtop = f[1, 1] = GridLayout()
+gmiddle = f[2, 1] = GridLayout()
+gbottom = f[3, 1] = GridLayout()
+
+ax11=AMakie.Axis(gtop[1,1:4],title="(a) Synthetic data generation", aspect = DataAspect())
+hidespines!(ax11); hidedecorations!(ax11); rowsize!(gtop,1,320); ; rowgap!(gtop,0)
+ax22=AMakie.Axis(gmiddle[1,1],title="(b) Cells", width=200, aspect = DataAspect()); hidedecorations!(ax22)
+ax23=AMakie.Axis(gmiddle[1,2],title="(c) Activities of cells",xlabel="time index")
+rowsize!(gmiddle,1,80); rowgap!(gmiddle,0)
+ax31=AMakie.Axis(gbottom[1,1],title="(d)", width=10, aspect = DataAspect()); hidedecorations!(ax31); hidespines!(ax31)
 #ax22=AMakie.Axis(f[2,2],title="AF=0.840, penalty=774.31", width=300, aspect = DataAspect()); hidedecorations!(ax22)
-ax22=AMakie.Axis(f[2,2],title="Average fit = 0.840", width=300, aspect = DataAspect()); hidedecorations!(ax22)
+ax32=AMakie.Axis(gbottom[1,2],title="Average fit = 0.840", width=300, aspect = DataAspect()); hidedecorations!(ax32)
 #ax23=AMakie.Axis(f[2,3],title="AF=0.941, penalty=742.83", width=300, aspect = DataAspect()); hidedecorations!(ax23)
-ax23=AMakie.Axis(f[2,3],title="Average fit = 0.941", width=300, aspect = DataAspect()); hidedecorations!(ax23)
+ax33=AMakie.Axis(gbottom[1,3],title="Average fit = 0.941", width=300, aspect = DataAspect()); hidedecorations!(ax33)
 #ax24=AMakie.Axis(f[2,4],title="AF=0.964, penalty=719.25", width=300, aspect = DataAspect()); hidedecorations!(ax24)
-ax24=AMakie.Axis(f[2,4],title="Average fit = 0.964", width=300, aspect = DataAspect()); hidedecorations!(ax24)
-image!(ax12, rotr90(imggt)); image!(ax22, rotr90(imgaf1)); image!(ax23, rotr90(imgaf2)); image!(ax24, rotr90(imgaf3))
-lin = [lines!(ax13,hd,color=cls[i],label=labels[i]) for (i,hd) in enumerate(eachcol(gtH))]
+ax34=AMakie.Axis(gbottom[1,4],title="Average fit = 0.964", width=300, aspect = DataAspect()); hidedecorations!(ax34)
+rowsize!(gbottom,1,80); rowgap!(gbottom,0)
+image!(ax11, rotr90(imgblk)); image!(ax22, rotr90(imggt)); image!(ax32, rotr90(imgaf1)); image!(ax33, rotr90(imgaf2)); image!(ax34, rotr90(imgaf3))
+lin = [lines!(ax23,hd,color=cls[i],label=labels[i]) for (i,hd) in enumerate(eachcol(gtH))]
 # axislegend(ax12,position=:rt)
-save(joinpath(subworkpath,"GT_cells_activities.png"),f)
+save(joinpath(subworkpath,"synthetic_n_af.png"),f)
 
 #======= compare SMF, Compressed NMF, HALS and Sparse PCA =======#
 img11 = load(joinpath(subworkpath,"SCA_fc0_0dB_meanT_isvd_optim_lbfgs_a100.0_b0.0_af0.970334652187394_r0.3_it100_rt0.2957052_gt_W_MSE0.0241.png"))

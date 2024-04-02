@@ -39,7 +39,7 @@ for bias in [0.1,0.5]
     gtfname = "fakecells$(inhibitindices)_calcium_sz$(imgsz)_lengthT$(lengthT)_SNR$(SNR)_bias$(bias)"
     imsave_data(dataset,joinpath(subworkpath,gtfname),gtW,gtH',imgsz,100; saveH=false)
     plotH_data(joinpath(subworkpath,gtfname),gtH'; space=0.,ylabel="",ytickformat="{:.2f}")
-    X = LCSVD.noisefilter(filter,X)
+    X = LCSVD.noisefilter(filter,X,imgsz)
 
     for subtract_bg in [false, true]
         sbgstr = subtract_bg ? "sbg" : "nosbg"
@@ -133,7 +133,7 @@ for bias in [0.1,0.5]
         nodr = LCSVD.matchedorder(ml,ncells); Wspca, Hspca = W[:,nodr], H[nodr,:]; # W3,H3 = sortWHslices(Whals,Hhals)
         makepositive && LCSVD.flip2makepos!(Wspca,Hspca,mask=:topNpix)
         fprex = "$(prefix)$(SNR)db$(inhibitindices)_bias$(bias)_$(sbgstr)"
-        fname = joinpath(subworkpath,"$(fprex)_f$(fitval)_it$(max_iter)_rt$(rtspca)")
+        fname = joinpath(subworkpath,"sp_meanT","$(fprex)_f$(fitval)_it$(max_iter)_rt$(rtspca)")
         imsave_data(dataset,fname,Wspca,Hspca,imgsz,100; saveH=false)
         plotH_data(fname*"_Hinhibit",Hspca[inhibitindices,:]; space=0.,ylabel="",ytickformat="{:.2f}")
 
@@ -145,7 +145,7 @@ for bias in [0.1,0.5]
         imgspca = TestData.mkimgW(Wspca,imgsz)
         # scainhibitindices = (bias == 0.5) && (subtract_bg == false) ? 8 : inhibitindices
         hdata = [gtH[:,inhibitindices[1]],Hlc[inhibitindices[1],:],Hcn[inhibitindices[1],:],Hhals[inhibitindices[1],:],Hspca[inhibitindices[1],:]] # Hlc inhibit index setting for plot
-        labels = ["Ground Truth","LCSVD","Compressed NMF","HALS NMF","SPCA"]
+        labels = ["Ground Truth","PCB","Compressed NMF","HALS NMF","SPCA"]
         f = Figure(resolution = (1000,400))
         ax11=AMakie.Axis(f[1,1],title=labels[2], aspect = DataAspect()); hidedecorations!(ax11)
         ax21=AMakie.Axis(f[2,1],title=labels[3], aspect = DataAspect()); hidedecorations!(ax21)
@@ -155,7 +155,7 @@ for bias in [0.1,0.5]
         image!(ax11, rotr90(imglc)); image!(ax21, rotr90(imgcn)); image!(ax31, rotr90(imghals)); image!(ax41, rotr90(imgspca))
         lin = [lines!(axall2,hd,linewidth=linewidth1,color=mtdcolors[colorindices[i]],linestyle=lstyles[i]) for (i,hd) in enumerate(hdata)]
         f[:,3] = Legend(f[:,2],lin,labels)
-        save(joinpath(subworkpath,"idx$(inhibitindices[1])_bias$(bias)_$(sbgstr).png"),f)
+        save(joinpath(subworkpath,"sp_meanT","idx$(inhibitindices[1])_bias$(bias)_$(sbgstr).png"),f)
 
         # result for 2 inhibit cells
         if length(inhibitindices) > 1
@@ -171,7 +171,7 @@ for bias in [0.1,0.5]
                     Hhals[inhibitindices[hindices[2]],:],Hspca[inhibitindices[hindices[2]],:]] # Hlc inhibit index setting for plot
             ahdata1 = #=subtract_bg=# false ? [gtH[:,ahindices[1]],Hlc[ahindices[1],:]] :
                     [gtH[:,ahindices[1]],Hlc[ahindices[1],:],Hcn[ahindices[1],:],Hhals[ahindices[1],:],Hspca[ahindices[1],:]] # Hlc inhibit index setting for plot
-            labels = ["Ground Truth","LCSVD","Compressed NMF","HALS NMF","SPCA"]
+            labels = ["Ground Truth","PCB","Compressed NMF","HALS NMF","SPCA"]
             f = Figure(resolution = (2000,800))
             ax11=AMakie.Axis(f[1,1],title=labels[2], titlesize = ftsize1, aspect = DataAspect()); hidedecorations!(ax11)
             ax21=AMakie.Axis(f[2,1],title=labels[3], titlesize = ftsize1, aspect = DataAspect()); hidedecorations!(ax21)
@@ -187,7 +187,7 @@ for bias in [0.1,0.5]
             lin1 = [lines!(ax122,hd,color=mtdcolors[colorindices[i]],linewidth=linewidth1,linestyle=lstyles[i]) for (i,hd) in enumerate(hdata1)]
             lin2 = [lines!(ax342,hd,color=mtdcolors[colorindices[i]],linewidth=linewidth1,linestyle=lstyles[i]) for (i,hd) in enumerate(ahdata1)]
             f[:,3] = Legend(f[:,2],lin1,labels,labelsize = ftsize2)
-            save(joinpath(subworkpath,"idx$(inhibitindices)_bias$(bias)_$(sbgstr).png"),f)
+            save(joinpath(subworkpath,"sp_meanT","idx$(inhibitindices)_bias$(bias)_$(sbgstr).png"),f)
         end
     end # subtract_bg
     # Input data
@@ -201,7 +201,7 @@ for bias in [0.1,0.5]
     lin = [lines!(axall2,hd,color=dtcolors[i]) for (i,hd) in enumerate(hdata)]
     foreach(i->labels[i] *= " (inhibited)" ,inhibitindices)
     f[:,4] = Legend(f[:,2],lin,labels)
-    save(joinpath(subworkpath,"idx$(inhibitindices)_bias$(bias)_gt.png"),f)
+    save(joinpath(subworkpath,"sp_meanT","idx$(inhibitindices)_bias$(bias)_gt.png"),f)
 end # bias
 
 
@@ -234,29 +234,29 @@ hidedecorations!(axd, label=false); hidespines!(axd); image!(axd, rotr90(load(fn
 rowsize!(g2,1,250); colgap!(g2,5)
 
 # Panel (b,e)
-Label(g3[1,1],"(b) Without background subtraction (10% bias)", font="Arial bold", fontsize=fontsize, width=700, padding=(10,2,0,0))
-Label(g3[1,2],"(e) Without background subtraction (50% bias)", font="Arial bold", fontsize=fontsize, width=700, padding=(10,2,0,0)) # g1p5[1,1,Bottom()]
+Label(g3[1,1],"(b) With background subtraction (10% bias)", font="Arial bold", fontsize=fontsize, width=700, padding=(10,2,0,0))
+Label(g3[1,2],"(e) With background subtraction (50% bias)", font="Arial bold", fontsize=fontsize, width=700, padding=(10,2,0,0)) # g1p5[1,1,Bottom()]
 rowsize!(g3,1,5)
 
-fname = joinpath(subworkpath, "sp_meanT", "idx[1, 2, 3, 4]_bias0.1_nosbg.png")
-axb=AMakie.Axis(g4[1,1], aspect = DataAspect())
-hidedecorations!(axb, label=false); hidespines!(axb); image!(axb, rotr90(load(fname)))
-fname = joinpath(subworkpath, "sp_meanT", "idx[1, 2, 3, 4]_bias0.5_nosbg.png")
-axe=AMakie.Axis(g4[1,2], aspect = DataAspect())
-hidedecorations!(axe, label=false); hidespines!(axe); image!(axe, rotr90(load(fname)));
+fname = joinpath(subworkpath, "sp_meanT", "idx[1, 2, 3, 4]_bias0.1_sbg.png")
+axc=AMakie.Axis(g4[1,1], aspect = DataAspect())
+hidedecorations!(axc, label=false); hidespines!(axc); image!(axc, rotr90(load(fname)))
+fname = joinpath(subworkpath, "sp_meanT", "idx[1, 2, 3, 4]_bias0.5_sbg.png")
+axf=AMakie.Axis(g4[1,2], aspect = DataAspect())
+hidedecorations!(axf, label=false); hidespines!(axf); image!(axf, rotr90(load(fname)));
 rowsize!(g4,1,300); colgap!(g4,5)
 
 # Panel (c,f)
-Label(g5[1,1],"(c) With background subtraction (10% bias)", font="Arial bold", fontsize=fontsize, width=700, padding=(10,2,0,0))
-Label(g5[1,2],"(f) With background subtraction (50% bias)", font="Arial bold", fontsize=fontsize, width=700, padding=(10,2,0,0)) # g1p5[1,1,Bottom()]
+Label(g5[1,1],"(c) Without background subtraction (10% bias)", font="Arial bold", fontsize=fontsize, width=700, padding=(10,2,0,0))
+Label(g5[1,2],"(f) Without background subtraction (50% bias)", font="Arial bold", fontsize=fontsize, width=700, padding=(10,2,0,0)) # g1p5[1,1,Bottom()]
 rowsize!(g5,1,5)
 
-fname = joinpath(subworkpath, "sp_meanT", "idx[1, 2, 3, 4]_bias0.1_sbg.png")
-axc=AMakie.Axis(g6[1,1], aspect = DataAspect())
-hidedecorations!(axc, label=false); hidespines!(axc); image!(axc, rotr90(load(fname)))
-fname = joinpath(subworkpath, "sp_meanT", "idx[1, 2, 3, 4]_bias0.5_sbg.png")
-axf=AMakie.Axis(g6[1,2], aspect = DataAspect())
-hidedecorations!(axf, label=false); hidespines!(axf); image!(axf, rotr90(load(fname)));
+fname = joinpath(subworkpath, "sp_meanT", "idx[1, 2, 3, 4]_bias0.1_nosbg.png")
+axb=AMakie.Axis(g6[1,1], aspect = DataAspect())
+hidedecorations!(axb, label=false); hidespines!(axb); image!(axb, rotr90(load(fname)))
+fname = joinpath(subworkpath, "sp_meanT", "idx[1, 2, 3, 4]_bias0.5_nosbg.png")
+axe=AMakie.Axis(g6[1,2], aspect = DataAspect())
+hidedecorations!(axe, label=false); hidespines!(axe); image!(axe, rotr90(load(fname)));
 rowsize!(g6,1,300); colgap!(g6,5)
 
 save(joinpath(subworkpath,"inhibit_all_figures.png"),f,px_per_unit=2)
@@ -289,3 +289,66 @@ rowgap!(g, 10)
 
 angle = pi/8
 =#
+
+
+using RCall
+
+
+# Load the ggplot2 library from R
+R"library(ggplot2)"
+# Create a sample data frame in R
+R"my_data <- data.frame(x = c(1, 2, 3, 4, 5), y = c(2, 4, 6, 8, 10))"
+# Create a ggplot object and display the plot
+R"ggplot(my_data, aes(x = x, y = y)) + geom_point()"
+
+# Create an array in Julia
+julia_array = rand(5)
+# Transfer the array to R
+@rput julia_array
+# Now you can use 'julia_array' in R
+R"print(julia_array)"
+# Execute some R code to modify the array
+R"julia_array <- julia_array * 2"
+R"r_array <- runif(10)"
+# Retrieve an object from R to Julia
+@rget julia_array
+@rget r_array
+R"""
+# This is a multiline R code block
+x <- c(1, 2, 3, 4, 5)
+y <- x^2
+print(y)
+"""
+
+
+R"library(epca)"
+
+@rput X
+# SCA : Sparse Component Analysis (sparsity is applied to only H(Y')) + maximize(∥Z'XY∥₂)
+prefix = "sca"
+rt2 = @elapsed R"factors_sca <-sca(X, k=15)" # default gamma = sqrt(p*k)=sqrt(1000*15)
+@rget factors_sca
+rW = factors_sca[:z]; rH = Array(factors_sca[:y]'); rW = X/rH
+LCSVD.normalizeW!(rW,rH); avgnssda, ml, nssdas = LCSVD.matchedWnssda(gtW, rW); fitval = LCSVD.fitd(X,rW*rH)
+nodr = LCSVD.matchedorder(ml,ncells); Wsca, Hsca = rW[:,nodr], rH[nodr,:]; # W3,H3 = sortWHslices(Whals,Hhals)
+LCSVD.flip2makepos!(Wsca,Hsca); # Wsca[:,1:4] .*= -1; Hsca[1:4,:] .*= -1
+fprex = "$(prefix)$(SNR)db$(inhibitindices)_bias$(bias)_$(sbgstr)"
+fname = joinpath(subworkpath,"$(fprex)_f$(fitval)_rt$(rt2)")
+imsave_data(dataset,fname,Wsca,Hsca,imgsz,100; saveH=false, scalemtd=:maxcol)
+plotH_data(fname*"_Hinhibit",Hsca[1:7,:]; space=0.,ylabel="",ytickformat="{:.2f}")
+
+# SMA : Sparse Matrix Approximation (sparsity is applied to both W(Z is nXk) and H(Y' is kXp))
+prefix = "sma"
+rt2 = @elapsed R"factors_sma <-sma(X, k=15)" # gamma_z=sqrt(p*k) and gamma_is default
+@rget factors_sma
+rW = factors_sma[:z]; rH = Array(factors_sma[:y]'); b = factors_sma[:b]; rH = b*rH
+LCSVD.normalizeW!(rW,rH); avgnssda, ml, nssdas = LCSVD.matchedWnssda(gtW, rW); fitval = LCSVD.fitd(X,rW*rH)
+nodr = LCSVD.matchedorder(ml,ncells); Wsca, Hsca = rW[:,nodr], rH[nodr,:]; # W3,H3 = sortWHslices(Whals,Hhals)
+LCSVD.flip2makepos!(Wsca,Hsca); # Wsca[:,5:7] .*= -1; Hsca[5:7,:] .*= -1
+fprex = "$(prefix)$(SNR)db$(inhibitindices)_bias$(bias)_g80_$(sbgstr)"
+fname = joinpath(subworkpath,"$(fprex)_f$(fitval)_rt$(rt2)")
+imsave_data(dataset,fname,Wsca,Hsca,imgsz,100; saveH=false, scalemtd=:maxcol)
+plotH_data(fname*"_Hinhibit",Hsca[1:7,:]; space=0.,ylabel="",ytickformat="{:.2f}")
+
+
+R"vignette(\"epca\")"

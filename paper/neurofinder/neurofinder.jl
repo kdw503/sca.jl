@@ -12,7 +12,7 @@ include(joinpath(workpath,"setup_light.jl"))
 subworkpath = joinpath(workpath,"paper","neurofinder")
 
 dataset = :neurofinder_small; SNR=0; inhibitindices=0; bias=0.1; initmethod=:isvd; initpwradj=:wh_normalize
-filter = :meanST # dataset ∈ [:neurofinder,:neurofinder_small,:fakecells] ? :meanST : nothing
+filter = nothing # dataset ∈ [:neurofinder,:neurofinder_small,:fakecells] ? :meanST : nothing
 datastr = dataset == :fakecells ? "_fc$(inhibitindices)_$(SNR)dB" : "_$(dataset)"
 
 lcsvd_maxiter = 100; lcsvd_inner_maxiter = 50; lcsvd_ls_maxiter = 100
@@ -57,7 +57,7 @@ uselv=false; s=10; maxiter = lcsvd_maxiter
 r=(0.3)^1 #0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
     # if this is too big iteration number would be increased
 #    try
-for (prefix,tailstr,initmethod,α,β) in [#("lcsvd_precon","_sp",:isvd,0.005,0.0),
+for (prefix,tailstr,initmethod,α,β) in [("lcsvd_precon","_sp",:tsvd,0.005,0.0),
                                 #("lcsvd_precon","_nn",:nndsvd,0.,1.0),
                                 #("lcsvd","_sp_nn",:nndsvd,0.005,1.0),
                                 ("lcsvd","_sp_nn",:nndsvd,0.005,0.1)
@@ -79,7 +79,7 @@ for (prefix,tailstr,initmethod,α,β) in [#("lcsvd_precon","_sp",:isvd,0.005,0.0
     # Mw, Mh = copy(Mw0), copy(Mh0);
     # rt2 = @elapsed W1, H1, objvals, laps, trs, niters = scasolve!(X, W0, H0, D, Mw, Mh, Wp, Hp; gtW=gtW, gtH=gtH,
     #                                 penmetric=penmetric, stparams=stparams, lsparams=lsparams, cparams=cparams);
-    rt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, ncells; initmethod=initmethod, svdmethod=:isvd) 
+    rt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, ncells; initmethod=initmethod, svdmethod=:tsvd) 
                                             # svdmethod = :isvd doesn't work for initmethod == :nndsvd
     W0 = W0[:,1:ncells]; H0 = H0[1:ncells,:]; M0 = M0[1:ncells,1:ncells]; N0 = N0[1:ncells,1:ncells]; D = D[1:ncells,1:ncells]
     σ0=s*std(W0) #=10*std(W0)=#
@@ -214,94 +214,94 @@ end
 
 
 #=========== layout 1 =================================#
-include(joinpath(workpath,"setup_plot.jl"))
+# include(joinpath(workpath,"setup_plot.jl"))
 
-fontsize = 30; imgsize = 310; gapsize = 5
+# fontsize = 30; imgsize = 310; gapsize = 5
 
-f = Figure(resolution = (2100,1000))
+# f = Figure(resolution = (2100,1000))
 
-g11 = f[1, 1] = GridLayout()
-g1p5 = f[1, 2] = GridLayout()
-g12 = f[1, 3] = GridLayout()
-g13 = f[1, 4] = GridLayout()
-g14 = f[1, 5] = GridLayout()
-g15 = f[1, 6] = GridLayout()
-g16 = f[1, 7] = GridLayout()
+# g11 = f[1, 1] = GridLayout()
+# g1p5 = f[1, 2] = GridLayout()
+# g12 = f[1, 3] = GridLayout()
+# g13 = f[1, 4] = GridLayout()
+# g14 = f[1, 5] = GridLayout()
+# g15 = f[1, 6] = GridLayout()
+# g16 = f[1, 7] = GridLayout()
 
-fname = joinpath(subworkpath,"neurofinder.02.00.cut100250_small_sqrt_meanimg.png")
-ax11=AMakie.Axis(g11[1,1],title="(a)", titlesize=fontsize, aspect = DataAspect())
-hidedecorations!(ax11); hidespines!(ax11); image!(ax11, rotr90(load(fname)));
-fname = joinpath(subworkpath,"neurofinder.02.00.cut100250_small_sqrt_corrimg_gt_with_number.png")
-ax21=AMakie.Axis(g11[2,1], aspect = DataAspect())
-hidedecorations!(ax21); hidespines!(ax21); image!(ax21, rotr90(load(fname)));
-colsize!(g11,1,imgsize) # colsize!(gridlayout,column_number,size) size is same as GLMakie.Fixed(size)
-rowsize!(g11,1,imgsize) # rowsize!(gridlayout,row_number,size) size is same as GLMakie.Fixed(size)
-rowsize!(g11,2,imgsize) # row 1 plus row 2 size are much smaller than height of figure. So they are stick together
-                        # with rowgap and located in the vertical center
-rowgap!(g11,gapsize)
+# fname = joinpath(subworkpath,"neurofinder.02.00.cut100250_small_sqrt_meanimg.png")
+# ax11=AMakie.Axis(g11[1,1],title="(a)", titlesize=fontsize, aspect = DataAspect())
+# hidedecorations!(ax11); hidespines!(ax11); image!(ax11, rotr90(load(fname)));
+# fname = joinpath(subworkpath,"neurofinder.02.00.cut100250_small_sqrt_corrimg_gt_with_number.png")
+# ax21=AMakie.Axis(g11[2,1], aspect = DataAspect())
+# hidedecorations!(ax21); hidespines!(ax21); image!(ax21, rotr90(load(fname)));
+# colsize!(g11,1,imgsize) # colsize!(gridlayout,column_number,size) size is same as GLMakie.Fixed(size)
+# rowsize!(g11,1,imgsize) # rowsize!(gridlayout,row_number,size) size is same as GLMakie.Fixed(size)
+# rowsize!(g11,2,imgsize) # row 1 plus row 2 size are much smaller than height of figure. So they are stick together
+#                         # with rowgap and located in the vertical center
+# rowgap!(g11,gapsize)
 
-Label(g1p5[1,1],"Original input", fontsize=fontsize, rotation=pi/2, padding=(2,2,-50,0)) # g1p5[1,1,Bottom()]
-Label(g1p5[2,1],"Preprocessed input", fontsize=fontsize, rotation=pi/2, padding=(2,2,10,0))
-Label(g1p5[3,1],"Background
-subtracted input", fontsize=fontsize, rotation=pi/2, padding=(2,2,20,0))
-foreach(i->rowsize!(g1p5,i,imgsize),1:3)
+# Label(g1p5[1,1],"Original input", fontsize=fontsize, rotation=pi/2, padding=(2,2,-50,0)) # g1p5[1,1,Bottom()]
+# Label(g1p5[2,1],"Preprocessed input", fontsize=fontsize, rotation=pi/2, padding=(2,2,10,0))
+# Label(g1p5[3,1],"Background
+# subtracted input", fontsize=fontsize, rotation=pi/2, padding=(2,2,20,0))
+# foreach(i->rowsize!(g1p5,i,imgsize),1:3)
 
-fname = joinpath(subworkpath, "lcsvd_precon", "lcsvd_preconisvd_nc25_a0.005_b0.0_f0.5577611936901041_af0.5506787477126039_it100_rt6.7638123_gt_W.png")
-ax12=AMakie.Axis(g12[1,1],title="(b)", titlesize=fontsize, aspect = DataAspect())
-hidedecorations!(ax12); hidespines!(ax12); image!(ax12, rotr90(load(fname)))
-fname = joinpath(subworkpath, "lcsvd_precon", "lcsvd_precon_meanSTisvd_nc25_a0.005_b0.0_f0.811942641687603_af0.7822030509925142_it100_rt7.9654936_gt_W.png")
-ax22=AMakie.Axis(g12[2,1], aspect = DataAspect())
-hidedecorations!(ax22); hidespines!(ax22); image!(ax22, rotr90(load(fname)));
-fname = joinpath(subworkpath, "lcsvd_precon", "sbg_lpfT", "lcsvd_precon_meanST_subbglpfisvd_nc25_a0.005_b0.0_f0.7113050975511606_af0.8081575529917868_it100_rt7.3482019_gt_W.png")
-ax32=AMakie.Axis(g12[3,1], aspect = DataAspect())
-hidedecorations!(ax32); hidespines!(ax32); image!(ax32, rotr90(load(fname)));
-gl=g12; colsize!(gl,1,imgsize); foreach(i->rowsize!(gl,i,imgsize),1:3); rowgap!(gl,5)
+# fname = joinpath(subworkpath, "lcsvd_precon", "lcsvd_preconisvd_nc25_a0.005_b0.0_f0.5577611936901041_af0.5506787477126039_it100_rt6.7638123_gt_W.png")
+# ax12=AMakie.Axis(g12[1,1],title="(b)", titlesize=fontsize, aspect = DataAspect())
+# hidedecorations!(ax12); hidespines!(ax12); image!(ax12, rotr90(load(fname)))
+# fname = joinpath(subworkpath, "lcsvd_precon", "lcsvd_precon_meanSTisvd_nc25_a0.005_b0.0_f0.811942641687603_af0.7822030509925142_it100_rt7.9654936_gt_W.png")
+# ax22=AMakie.Axis(g12[2,1], aspect = DataAspect())
+# hidedecorations!(ax22); hidespines!(ax22); image!(ax22, rotr90(load(fname)));
+# fname = joinpath(subworkpath, "lcsvd_precon", "sbg_lpfT", "lcsvd_precon_meanST_subbglpfisvd_nc25_a0.005_b0.0_f0.7113050975511606_af0.8081575529917868_it100_rt7.3482019_gt_W.png")
+# ax32=AMakie.Axis(g12[3,1], aspect = DataAspect())
+# hidedecorations!(ax32); hidespines!(ax32); image!(ax32, rotr90(load(fname)));
+# gl=g12; colsize!(gl,1,imgsize); foreach(i->rowsize!(gl,i,imgsize),1:3); rowgap!(gl,5)
 
-fname = joinpath(subworkpath, "lcsvd", "lcsvdnndsvd_nc25_a0.005_b0.1_f0.5553556791079356_af0.5518840632255515_it100_rt11.4283836_gt_W.png")
-ax13=AMakie.Axis(g13[1,1],title="(c)", titlesize=fontsize, aspect = DataAspect())
-hidedecorations!(ax13); hidespines!(ax13); image!(ax13, rotr90(load(fname)));
-fname = joinpath(subworkpath, "lcsvd", "lcsvd_meanSTnndsvd_nc25_a0.005_b0.1_f0.8107100476137238_af0.7510079152231729_it100_rt20.1313502_gt_W.png")
-ax23=AMakie.Axis(g13[2,1], aspect = DataAspect())
-hidedecorations!(ax23); hidespines!(ax23); image!(ax23, rotr90(load(fname)));
-fname = joinpath(subworkpath, "lcsvd", "sbg_lpfT", "lcsvd_meanST_subbglpfnndsvd_nc25_a0.005_b0.1_f0.6699229292315947_af0.7662525717170353_it100_rt18.4458246_gt_W.png")
-ax33=AMakie.Axis(g13[3,1], aspect = DataAspect())
-hidedecorations!(ax33); hidespines!(ax33); image!(ax33, rotr90(load(fname)));
-gl=g13; colsize!(gl,1,imgsize); foreach(i->rowsize!(gl,i,imgsize),1:3); rowgap!(gl,5)
+# fname = joinpath(subworkpath, "lcsvd", "lcsvdnndsvd_nc25_a0.005_b0.1_f0.5553556791079356_af0.5518840632255515_it100_rt11.4283836_gt_W.png")
+# ax13=AMakie.Axis(g13[1,1],title="(c)", titlesize=fontsize, aspect = DataAspect())
+# hidedecorations!(ax13); hidespines!(ax13); image!(ax13, rotr90(load(fname)));
+# fname = joinpath(subworkpath, "lcsvd", "lcsvd_meanSTnndsvd_nc25_a0.005_b0.1_f0.8107100476137238_af0.7510079152231729_it100_rt20.1313502_gt_W.png")
+# ax23=AMakie.Axis(g13[2,1], aspect = DataAspect())
+# hidedecorations!(ax23); hidespines!(ax23); image!(ax23, rotr90(load(fname)));
+# fname = joinpath(subworkpath, "lcsvd", "sbg_lpfT", "lcsvd_meanST_subbglpfnndsvd_nc25_a0.005_b0.1_f0.6699229292315947_af0.7662525717170353_it100_rt18.4458246_gt_W.png")
+# ax33=AMakie.Axis(g13[3,1], aspect = DataAspect())
+# hidedecorations!(ax33); hidespines!(ax33); image!(ax33, rotr90(load(fname)));
+# gl=g13; colsize!(gl,1,imgsize); foreach(i->rowsize!(gl,i,imgsize),1:3); rowgap!(gl,5)
 
-fname = joinpath(subworkpath, "compnmf", "compnmflowrank_nndsvd_nc25_f0.5551290037736494_af0.5692559827785831_it100_rt1.0367607316070533_W.png")
-ax14=AMakie.Axis(g14[1,1],title="(d)", titlesize=fontsize, aspect = DataAspect())
-hidedecorations!(ax14); hidespines!(ax14); image!(ax14, rotr90(load(fname)));
-fname = joinpath(subworkpath, "compnmf", "compnmf_meanSTlowrank_nndsvd_nc25_f0.8125122185012364_af0.6995833110397979_it100_rt0.5300679057220492_W.png")
-ax24=AMakie.Axis(g14[2,1], aspect = DataAspect())
-hidedecorations!(ax24); hidespines!(ax24); image!(ax24, rotr90(load(fname)));
-fname = joinpath(subworkpath, "compnmf", "sbg_lpfT", "compnmf_meanST_subbglpflowrank_nndsvd_nc25_f0.5345823678756119_af0.6548338612282834_it100_rt0.9598744771118177_W.png")
-ax34=AMakie.Axis(g14[3,1], aspect = DataAspect())
-hidedecorations!(ax34); hidespines!(ax34); image!(ax34, rotr90(load(fname)));
-gl=g14; colsize!(gl,1,imgsize); foreach(i->rowsize!(gl,i,imgsize),1:3); rowgap!(gl,5)
+# fname = joinpath(subworkpath, "compnmf", "compnmflowrank_nndsvd_nc25_f0.5551290037736494_af0.5692559827785831_it100_rt1.0367607316070533_W.png")
+# ax14=AMakie.Axis(g14[1,1],title="(d)", titlesize=fontsize, aspect = DataAspect())
+# hidedecorations!(ax14); hidespines!(ax14); image!(ax14, rotr90(load(fname)));
+# fname = joinpath(subworkpath, "compnmf", "compnmf_meanSTlowrank_nndsvd_nc25_f0.8125122185012364_af0.6995833110397979_it100_rt0.5300679057220492_W.png")
+# ax24=AMakie.Axis(g14[2,1], aspect = DataAspect())
+# hidedecorations!(ax24); hidespines!(ax24); image!(ax24, rotr90(load(fname)));
+# fname = joinpath(subworkpath, "compnmf", "sbg_lpfT", "compnmf_meanST_subbglpflowrank_nndsvd_nc25_f0.5345823678756119_af0.6548338612282834_it100_rt0.9598744771118177_W.png")
+# ax34=AMakie.Axis(g14[3,1], aspect = DataAspect())
+# hidedecorations!(ax34); hidespines!(ax34); image!(ax34, rotr90(load(fname)));
+# gl=g14; colsize!(gl,1,imgsize); foreach(i->rowsize!(gl,i,imgsize),1:3); rowgap!(gl,5)
 
-fname = joinpath(subworkpath, "hals", "halsnndsvd_nc25_a0.0_f0.5602236872422826_af0.580751371769372_it100_rt12.451775_W.png")
-ax15=AMakie.Axis(g15[1,1],title="(e)", titlesize=fontsize, aspect = DataAspect())
-hidedecorations!(ax15); hidespines!(ax15); image!(ax15, rotr90(load(fname)));
-fname = joinpath(subworkpath, "hals", "hals_meanSTnndsvd_nc25_a0.0_f0.8131191402699999_af0.7361413740458617_it100_rt13.0424639_W.png")
-ax25=AMakie.Axis(g15[2,1], aspect = DataAspect())
-hidedecorations!(ax25); hidespines!(ax25); image!(ax25, rotr90(load(fname)));
-fname = joinpath(subworkpath, "hals", "sbg_lpfT", "hals_meanST_subbglpfnndsvd_nc25_a0.0_f0.615633771593345_af0.7657844863189028_it100_rt13.1420257_W.png")
-ax35=AMakie.Axis(g15[3,1], aspect = DataAspect())
-hidedecorations!(ax35); hidespines!(ax35); image!(ax35, rotr90(load(fname)));
-gl=g15; colsize!(gl,1,imgsize); foreach(i->rowsize!(gl,i,imgsize),1:3); rowgap!(gl,5)
+# fname = joinpath(subworkpath, "hals", "halsnndsvd_nc25_a0.0_f0.5602236872422826_af0.580751371769372_it100_rt12.451775_W.png")
+# ax15=AMakie.Axis(g15[1,1],title="(e)", titlesize=fontsize, aspect = DataAspect())
+# hidedecorations!(ax15); hidespines!(ax15); image!(ax15, rotr90(load(fname)));
+# fname = joinpath(subworkpath, "hals", "hals_meanSTnndsvd_nc25_a0.0_f0.8131191402699999_af0.7361413740458617_it100_rt13.0424639_W.png")
+# ax25=AMakie.Axis(g15[2,1], aspect = DataAspect())
+# hidedecorations!(ax25); hidespines!(ax25); image!(ax25, rotr90(load(fname)));
+# fname = joinpath(subworkpath, "hals", "sbg_lpfT", "hals_meanST_subbglpfnndsvd_nc25_a0.0_f0.615633771593345_af0.7657844863189028_it100_rt13.1420257_W.png")
+# ax35=AMakie.Axis(g15[3,1], aspect = DataAspect())
+# hidedecorations!(ax35); hidespines!(ax35); image!(ax35, rotr90(load(fname)));
+# gl=g15; colsize!(gl,1,imgsize); foreach(i->rowsize!(gl,i,imgsize),1:3); rowgap!(gl,5)
 
-fname = joinpath(subworkpath, "hals", "halsnndsvd_nc25_a0.001_f0.5577553479799731_af0.5537833622451933_it100_rt12.3802724_W.png")
-ax16=AMakie.Axis(g16[1,1],title="(f)", titlesize=fontsize, aspect = DataAspect())
-hidedecorations!(ax16); hidespines!(ax16); image!(ax16, rotr90(load(fname)));
-fname = joinpath(subworkpath, "hals", "hals_meanSTnndsvd_nc25_a0.001_f0.8117235995246221_af0.7726442854762007_it100_rt12.6269606_W.png")
-ax26=AMakie.Axis(g16[2,1], aspect = DataAspect())
-hidedecorations!(ax26); hidespines!(ax26); image!(ax26, rotr90(load(fname)));
-fname = joinpath(subworkpath, "hals", "sbg_lpfT", "hals_meanST_subbglpfnndsvd_nc25_a0.001_f0.6027381534611983_af0.7711908145966705_it100_rt12.8125903_W.png")
-ax36=AMakie.Axis(g16[3,1], aspect = DataAspect())
-hidedecorations!(ax36); hidespines!(ax36); image!(ax36, rotr90(load(fname)));
-gl=g16; colsize!(gl,1,imgsize); foreach(i->rowsize!(gl,i,imgsize),1:3); rowgap!(gl,5)
+# fname = joinpath(subworkpath, "hals", "halsnndsvd_nc25_a0.001_f0.5577553479799731_af0.5537833622451933_it100_rt12.3802724_W.png")
+# ax16=AMakie.Axis(g16[1,1],title="(f)", titlesize=fontsize, aspect = DataAspect())
+# hidedecorations!(ax16); hidespines!(ax16); image!(ax16, rotr90(load(fname)));
+# fname = joinpath(subworkpath, "hals", "hals_meanSTnndsvd_nc25_a0.001_f0.8117235995246221_af0.7726442854762007_it100_rt12.6269606_W.png")
+# ax26=AMakie.Axis(g16[2,1], aspect = DataAspect())
+# hidedecorations!(ax26); hidespines!(ax26); image!(ax26, rotr90(load(fname)));
+# fname = joinpath(subworkpath, "hals", "sbg_lpfT", "hals_meanST_subbglpfnndsvd_nc25_a0.001_f0.6027381534611983_af0.7711908145966705_it100_rt12.8125903_W.png")
+# ax36=AMakie.Axis(g16[3,1], aspect = DataAspect())
+# hidedecorations!(ax36); hidespines!(ax36); image!(ax36, rotr90(load(fname)));
+# gl=g16; colsize!(gl,1,imgsize); foreach(i->rowsize!(gl,i,imgsize),1:3); rowgap!(gl,5)
 
-save(joinpath(subworkpath,"neurofinder_all_figures.png"),f,px_per_unit=2)
+# save(joinpath(subworkpath,"neurofinder_all_figures.png"),f,px_per_unit=2)
 
 
 #=========== layout 2 =================================#

@@ -127,7 +127,7 @@ hidexdecorations!(ax11_2)
 
 plotrng = Colon()
 ln1s = []; ln2s = []; lbls=[]
-for (i,(mtdstr,submtdstr,lbl,clridx)) in enumerate([("lcsvd_precon","_sp","PCB (α∈[0.001,0.01])",2),
+for (i,(mtdstr,submtdstr,lbl,clridx)) in enumerate([("lcsvd_precon","_sp","LCSVD (α∈[0.001,0.01])",2),
                                             ("compnmf","_nn","Compressed NMF",5),
                                             ("hals","_sp_nn","HALS (α∈[0,0.5])",3)])
     # eval(print("$(frpx)_means"))
@@ -148,7 +148,7 @@ save(joinpath(subworkpath,"cbclface_alpha_fits.png"),fig,px_per_unit=2)
 
 
 
-#=
+
 #================================= plot fixed alpha ===================#
 z = 0.5
 for prefix in ["lcsvd_precon","compnmf","hals"]
@@ -384,5 +384,3 @@ ys_high = 0.2 .* sin.(xs) .+ 0.25
 
 band!(xs, ys_low, ys_high)
 band!(xs, ys_low .- 1, ys_high .-1, color = RGBA(0,0,0,0.5))
-
-=#

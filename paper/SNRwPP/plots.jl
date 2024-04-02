@@ -157,9 +157,9 @@ lns = Dict(); bnds=Dict()
 #                                  ("admm_nn","Comp. NMF (α=0)"),("admm_sp","Comp. LCSVD (α=10)"),
 #                                  ("sca_nn","LCSVD (α=0,β=1000)"),("sca_sp_nn","LCSVD (α=100,β=1000)"),("admm_sp_nn","Comp. NMF (α=10)"),])
 for (i,(mtdstr, submtdstr, lbl, clridx, linestyle)) in enumerate(
-    [("lcsvd_precon","_sp","LCSVD precond (α=0.005,β=0)",2,nothing),
+    [("lcsvd_precon","_sp","PCB precond (α=0.005,β=0)",2,nothing),
 #    ("lcsvd_precon","_nn","LCSVD precond (α=0,β=5.0)",6,:dashdot),
-    ("lcsvd","_sp_nn","LCSVD (α=0.005,β=5.0)",4,:dash),
+    ("lcsvd","_sp_nn","PCB (α=0.005,β=5.0)",4,:dash),
     ("compnmf","_nn","Compressed NMF",5,nothing),
     ("hals","_nn","HALS (α=0)",3,nothing),
     ("hals","_sp_nn","HALS (α=0.1)",7,:dash)]) # all

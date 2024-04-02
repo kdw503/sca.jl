@@ -61,7 +61,7 @@ if subtract_bg
     bg = Wcd*fill(mean(Hcd),1,n); X .-= bg
 end
 
-# PCB
+# LCSVD
 prefix = "lcsvd_precon"; @show prefix
 αrng = range(0.001,0.01,num_experiments); fvs = Float64[]; spws = Float64[]; msess=[]
 for iter in 1:num_experiments
@@ -73,9 +73,9 @@ for iter in 1:num_experiments
         # if this is too big iteration number would be increased
     α1=α2=α=0.01    #αrng[iter]; 
     β1=β2=β=0
-    (tailstr,initmethod) = ("_sp",:tsvd)
+    (tailstr,initmethod) = ("_sp",:isvd)
 
-    rt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, ncells; initmethod=initmethod)
+    rt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, ncells; initmethod=initmethod, svdmethod=:isvd)
     σ0=s*std(W0) #=10*std(W0)=#
     alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, σ0=σ0, r=r, useprecond=useprecond, usedenoiseW0H0=false,
         denoisefilter=:avg, uselv=false, imgsz=imgsz, maskW=maskW, maskH=maskH, maxiter = maxiter, store_trace = true,
@@ -93,9 +93,10 @@ for iter in 1:num_experiments
     # precondstr = useprecond ? "_precond" : ""
     # useLPFstr = usedenoiseW0H0 ? "_$(alg.denoisefilter)" : ""
     fname = joinpath(subworkpath,prefix,"$(fprex)_a$(α)_b$(β)_fv$(fitval)_it$(rst0.niters)_rt$(rt2)")
-    if true
+    if false
         imsave_data(dataset,fname,Wlc,Hlc,imgsz,100; saveH=false)
         imsave_reconstruct(fname,X,Wlc,Hlc,imgsz; index=100, orgimg=loadface(100), gridcols=7, clamp_level=1.0)
+        imsave_reconstruct(fname,X,Wlc,Hlc,imgsz; index=53, orgimg=loadface(53), gridcols=7, clamp_level=1.0)
         imsave_reconstruct(fname,X,Wlc,Hlc,imgsz; index=199,  orgimg=loadface(199), gridcols=7, clamp_level=1.0)
     end
     mses = Float64[]
@@ -113,10 +114,10 @@ save(joinpath(subworkpath,"mselc.jld2"),"msesslc",msesslc,"msemeanslc",msemeansl
 
 # CompNMF
 prefix="compnmf"; @show prefix
-maxiter = 50 # 500
+maxiter = compnmf_maxiter
+@show iter
 rt1 = @elapsed Wcn0, Hcn0 = NMF.nndsvd(X, ncells, variant=:ar);
 for iter in 1:num_experiments
-    @show iter; flush(stdout)
     # L, R, X_tilde, Y_tilde, A_tilde = CompNMF.compmat(X, Wcn0, Hcn0; w=4)
     # X_tilde, Y_tilde = CompNMF.compressive_nmf(A_tilde, L, R, ncells; max_iter=1000, ls=0)
     # Wcn = L*X_tilde; Hcn = Y_tilde*R
@@ -133,6 +134,7 @@ for iter in 1:num_experiments
     fname = joinpath(subworkpath,prefix,"$(fprex)_fv$(fitval)_it$(maxiter)_rt$(rt2)")
     imsave_data(dataset,fname,Wcn,Hcn,imgsz,100; saveH=false)
     imsave_reconstruct(fname,X,Wcn,Hcn,imgsz; index=100,  orgimg=loadface(100), gridcols=7, clamp_level=1.0)
+    imsave_reconstruct(fname,X,Wcn,Hcn,imgsz; index=101,  orgimg=loadface(101), gridcols=7, clamp_level=1.0)
     imsave_reconstruct(fname,X,Wcn,Hcn,imgsz; index=199,  orgimg=loadface(199), gridcols=7, clamp_level=1.0)
     # series([gtH[:,inhibitindices],Hadmm[inhibitindices,:]]; color=cls); save(joinpath(subworkpath,"$(fprx)_H.png"),current_figure())
 end
@@ -146,7 +148,7 @@ hals_αrng = range(0,0.5,num_experiments); msess=[]
 for iter in 1:num_experiments
     @show iter; flush(stdout)
 
-    α = 0
+    α = hals_αrng[iter]
     Wcd, Hcd = copy(Wcd0), copy(Hcd0);
     rt2 = @elapsed NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=maxiter, α=α, l₁ratio=1,
                 tol=tol, verbose=false), X, Wcd, Hcd)
@@ -154,9 +156,10 @@ for iter in 1:num_experiments
     LCSVD.normalizeW!(Wcd,Hcd)
     fprex = "$(prefix)"
     fname = joinpath(subworkpath,prefix,"$(fprex)_a$(α)_fv$(fitval)_it$(maxiter)_rt$(rt2)")
-    if true
+    if false
         imsave_data(dataset,fname,Wcd,Hcd,imgsz,100; saveH=false)
         imsave_reconstruct(fname,X,Wcd,Hcd,imgsz; index=100,  orgimg=loadface(100), gridcols=7, clamp_level=1.0)
+        imsave_reconstruct(fname,X,Wcd,Hcd,imgsz; index=53,  orgimg=loadface(53), gridcols=7, clamp_level=1.0)
         imsave_reconstruct(fname,X,Wcd,Hcd,imgsz; index=199,  orgimg=loadface(199), gridcols=7, clamp_level=1.0)
     end
     mses = Float64[]
@@ -172,12 +175,9 @@ msesshals = hcat(msess...); msemeanshals = dropdims(mean(msesshals[1:500,:],dims
 msemxshals = dropdims(maximum(msesshals,dims=2),dims=2); msemnshals = dropdims(minimum(msesshals,dims=2),dims=2)
 save(joinpath(subworkpath,"msehals.jld2"),"msesshals",msesshals,"msemeanshals",msemeanshals,"msemxshals",msemxshals,"msemnshals",msemnshals)
 
-include(joinpath(workpath,"setup_plot.jl"))
 
-#=== face1to200mses.png ===#
-# run these after running the front part of this file
 fontsize = 20
-f = Figure(resolution=(800,400)); lbls = ["PCB", "HALS NMF"]; plts = []
+f = Figure(resolution=(800,400)); lbls = ["LCSVD", "HALS NMF"]; plts = []
 msemeanslc = load(joinpath(subworkpath,"mselc.jld2"),"msemeanslc")
 msemeanshals = load(joinpath(subworkpath,"msehals.jld2"),"msemeanshals")
 ax=AMakie.Axis(f[1,1], ylabel="MSE", ylabelsize=fontsize, yticklabelsize=fontsize,
@@ -190,21 +190,17 @@ push!(plts,plot!(ax,1:200,msemeanshals[1:200], color=mtdcolors[3], label=lbls[2]
 Legend(f[1,2], plts, lbls, #= ["Methods"],=# labelsize=fontsize)
 save(joinpath(subworkpath,"face1to200mses.png"),f,px_per_unit=2)
 
-# # need to run runtime_all.jl
-# imgfit = load(joinpath(subworkpath,"cbclface_alpha_fits.png")) # this from plot.jl
-# imgmse = load(joinpath(subworkpath,"face1to200mses.png"))
-# f = Figure(resolution = (1800,500))
-# ax11=AMakie.Axis(f[1,1], titlesize=30, aspect = DataAspect())
-# hidedecorations!(ax11); hidespines!(ax11); image!(ax11, rotr90(imgfit));
-# ax21=AMakie.Axis(f[1,2], titlesize=30, aspect = DataAspect())
-# hidedecorations!(ax21); hidespines!(ax21); image!(ax21, rotr90(imgmse));
-# save(joinpath(subworkpath,"fit_mse.png"),f,px_per_unit=2)
+imgfit = load(joinpath(subworkpath,"cbclface_alpha_fits.png")) # this from plot.jl
+imgmse = load(joinpath(subworkpath,"face1to200mses.png"))
+f = Figure(resolution = (1800,500))
+ax11=AMakie.Axis(f[1,1], titlesize=30, aspect = DataAspect())
+hidedecorations!(ax11); hidespines!(ax11); image!(ax11, rotr90(imgfit));
+ax21=AMakie.Axis(f[1,2], titlesize=30, aspect = DataAspect())
+hidedecorations!(ax21); hidespines!(ax21); image!(ax21, rotr90(imgmse));
+save(joinpath(subworkpath,"fit_mse.png"),f,px_per_unit=2)
 
-#=== cbclface_alpha_fits.png ===#
-# this will be get after running runtime_all.jl and plots.jl
 
-#=== cbclface.png ===#
-# these figures are chosen after running the front part of this file and move to the subworkpath
+# Figure
 mtdcolors = [RGBA{N0f8}(0.00,0.00,0.00,1.0),RGBA{N0f8}(0.00,0.45,0.70,1.0),RGBA{N0f8}(0.90,0.62,0.00,1.0),
              RGBA{N0f8}(0.00,0.62,0.45,1.0),RGBA{N0f8}(0.80,0.47,0.65,1.0),RGBA{N0f8}(0.34,0.71,0.91,1.0),
              RGBA{N0f8}(0.84,0.37,0.00,1.0),RGBA{N0f8}(0.94,0.89,0.26,1.0)]
@@ -243,7 +239,7 @@ facecn199_2 = load(joinpath(subworkpath,"compnmf_fv0.9826_it500_rt2.97_recon199_
 facehals199_1 = load(joinpath(subworkpath,"hals_a0_fv0.9983_it400_rt3.78_recon199_mse0.00580.png"))
 facehals199_2 = load(joinpath(subworkpath,"hals_a0.1_fv0.9982_it400_rt3.07_recon199_mse0.00670.png"))
 
-labels = ["PCB","Compressed NMF","HALS NMF"]
+labels = ["LCSVD","Compressed NMF","HALS NMF"]
 f = Figure(resolution = (1500,900))
 
 ax123=AMakie.Axis(f[1:2,2:3],title=labels[1], titlesize=30, aspect = DataAspect())
@@ -285,7 +281,6 @@ MSE=0.0067"""); hidedecorations!(ax47); image!(ax47, rotr90(facehals199_2));
 
 save(joinpath(subworkpath,"cbclface.png"),f)
 
-#=== combine all ===#
 fontsize = 30
 f = Figure(resolution=(1500,1400))
 gt = f[1,1] = GridLayout()
