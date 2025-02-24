@@ -1,0 +1,14 @@
+#!/bin/bash
+# smjuliajob $MYSTORAGE/work/julia/sca/expr5
+# julia         file              SNR, num_experiments, sca_maxiter, hals_maxiter, admm_maxiter, hals_α
+
+export jlexec=/usr/local/julia/bin/julia
+export jlfile=$MYSTORAGE/work/julia/sca/paper/Denoise/runtime_all.jl
+lscpu >> $MYSTORAGE/work/julia/sca/paper/Denoise/machine.txt
+$jlexec $jlfile \"Denoise\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"hals\"] 10 -10 1 15 150 :meanS 3 3 150
+$jlexec $jlfile \"Denoise\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"hals\"] 10 -10 1 15 150 :meanT 3 3 150
+$jlexec $jlfile \"Denoise\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"hals\"] 10 -10 1 15 150 :meanT 3 5 150
+$jlexec $jlfile \"Denoise\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"hals\"] 10 -10 1 15 150 :meanT 3 7 150
+$jlexec $jlfile \"Denoise\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"hals\"] 10 -10 1 15 150 :meanST 3 3 150
+$jlexec $jlfile \"Denoise\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"hals\"] 10 -10 1 15 150 :meanST 3 5 150
+$jlexec $jlfile \"Denoise\" [\"lcsvd_precon\",\"lcsvd_precon_LPF\",\"hals\"] 10 -10 1 15 150 :meanST 3 7 150

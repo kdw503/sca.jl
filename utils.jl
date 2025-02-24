@@ -1,19 +1,5 @@
-"""
-X = noisefilter(filter,X)
-filter : :medT, :meanT, :medS
-"""
-function noisefilter(filter,X)
-    if filter == :medT
-        X = mapwindow(median!, X, (1,3)) # just for each row
-    elseif filter == :meanT
-        X = mapwindow(mean, X, (1,3)) # just for each row
-    elseif filter == :medS
-        rsimg = reshape(X,imgsz...,lengthT)
-        rsimgm = mapwindow(median!, rsimg, (3,3,1))
-        X = reshape(rsimgm,*(imgsz...),lengthT)
-    end
-    X
-end
+total_mem() = (size=Int(Sys.total_memory())/1e9; println("$(size) GBytes"))
+free_mem() = (size=Int(Sys.free_memory())/1e9; println("$(size) GBytes"))
 
 function symbol()
     println("∥ \\parallel, ∦ \\nparallel, ≤ \\leq, ≥ \\geq, ≐ \\doteq, ≍ \\asymp, ⋈ \\bowtie, ≪ \\ll, ≫ \\gg, ≡ \\equiv,")
@@ -48,4 +34,88 @@ function greek()
     println("N ν: N \\nu,                       Ξ ξ: \\xi,                          O o: O  o,      Π π ϖ: \\Pi \\pi \\varpi,")
     println("P ρ ϱ: P \\rho \\varrho,           Σ σ ς: \\Sigma \\sigma \\varsigma,  T τ: T  \\tau,  Y υ: Y \\upsilon,")
     println("Φ ϕ φ: \\Phi \\phi \\varphi,       X χ: X \\chi,                       Ψ ψ: \\psi,     Ω ω: \\omega")
+end
+
+
+function mkimgUM(U,M,imgsz)
+    ncells = size(U,2)
+    UM = U*M
+    UMrs = reshape(UM, imgsz..., ncells)
+    Urs  = reshape(U, imgsz..., ncells)
+
+    # Prepare for display
+    mxabs = max(maximum(abs, UMrs), maximum(abs, Urs))
+    fsc = scalesigned(mxabs)
+    fcol = colorsigned()
+
+    mappedarray(fcol ∘ fsc, reshape(Urs, Val(2))), mappedarray(fcol ∘ fsc, reshape(UMrs, Val(2)))
+end
+
+function imshowUM(U,M,imgsz)
+    uimg, umimg = mkimgUM(U,M,imgsz)
+    if is_ImageView_available
+        imshow(uimg)
+        imshow(umimg)
+    else
+        @warn("ImageView is not available!")
+    end
+end
+
+function imsaveUM(fname,U,M,imgsz)
+    uimg, umimg = mkimgUM(U,M,imgsz)
+    Images.save("uimg.png", uimg)
+    Images.save(fname, umimg)
+end
+
+function mkimgW(W::Matrix{T},imgsz; gridcols=size(W,2), borderwidth=1, borderval=0.7, scalemtd=:maxwhole,
+        colors=(colorant"green1", colorant"white", colorant"magenta")) where T
+    ncells = size(W,2)
+    if scalemtd == :maxwhole
+        mxabs = max(eps(eltype(W)),maximum(abs, W))
+        fsc = scalesigned(mxabs)
+        fcol = colorsigned(colors...)
+        Wcolor = Array(mappedarray(fcol ∘ fsc, reshape(W, Val(2))))
+    elseif scalemtd == :maxcol
+        fsc = (x) -> (mxabs=max(eps(eltype(x)),maximum(abs, x)); x./mxabs)
+        sW = similar(W)
+        for (i,x) in enumerate(eachcol(W)) sW[:,i] = fsc(x) end
+        fcol = colorsigned(colors...)
+        Wcolor = Array(mappedarray(fcol, reshape(sW, Val(2))))
+    elseif scalemtd == :maxgridrow
+        fsc = (x) -> (mxabs=max(eps(eltype(x)),maximum(abs, x)); x./mxabs)
+        sW = similar(W)
+        for i in 1:gridcols:ncells
+            x = view(W,:,i:min(i+4,ncells))
+            sW[:,i:min(i+4,ncells)]=fsc(x)
+        end
+        fcol = colorsigned(colors...)
+        Wcolor = Array(mappedarray(fcol, reshape(sW, Val(2))))
+    elseif scalemtd == :avgwhole
+        avgabs = sum(abs,W)/length(W)*18; sW = W./avgabs; clamp!(sW,-1,1)
+        fcol = colorsigned(colors...)
+        Wcolor = Array(mappedarray(fcol, reshape(sW, Val(2))))
+    end
+    gridsz = ((ncells-1)÷gridcols+1,gridcols)
+    add_dim_sz = ntuple(i->1,Val(length(imgsz)-length(gridsz)))
+    bordersz = ntuple(i->borderwidth,Val(2))
+    bimgsz = imgsz.+(bordersz..., add_dim_sz...)
+    gimgsz = bimgsz.*(gridsz..., add_dim_sz...).+bordersz
+    fill_val = eltype(Wcolor)(borderval)
+    Wrs = fill(fill_val, gimgsz...)
+    for i in 1:ncells
+        gi = (i-1)÷gridsz[2]+1
+        gj = i-(gi-1)*gridsz[2]
+        gindices = (gi-1,gj-1, (add_dim_sz.-add_dim_sz)...)
+        offset = gindices.*bimgsz .+ bordersz
+        rngs = ntuple(i->offset[i]+1:offset[i]+imgsz[i], length(imgsz))
+        Wrs[rngs...] = reshape(Wcolor[:,i], imgsz...)
+    end
+    Wrs
+end
+
+function mkimgH(H::Matrix{T}, tlength=size(H,2); colors=(colorant"green1", colorant"white", colorant"magenta")) where T
+    mxabs = maximum(abs, H)
+    fsc = scalesigned(mxabs)
+    fcol = colorsigned(colors...)
+    Array(mappedarray(fcol ∘ fsc, reshape(H[:,1:tlength], Val(2))))
 end

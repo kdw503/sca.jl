@@ -33,5 +33,11 @@ Manifest.toml
 *.mp4
 *.mpg
 *.zip
+*.txt
+*.bin
+*.cfg
+*.jpg
 *workspace
 Thumbs.db
+paper/compnmf/Lib
+paper/compnmf/Scripts

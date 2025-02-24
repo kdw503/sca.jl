@@ -18,13 +18,15 @@ Pkg.activate(".")
 z = 0.5
 
 #================================= plot fixed alpha ===================#
-for mtdstr in ["sca","admm","hals"]
+for mtdstr in ["lcsvd","compnmf","hals"]
+    @show mtdstr
     ddstr = "dd$(mtdstr)"; ddsym = Symbol(ddstr)
 #    @eval (($ddsym)=(load("$(mtdstr)_runtime_vs_avgfits.jld2"))) # this doens't work 'mtdstr' refer global variable
     eval(Meta.parse("$(ddstr)=load(joinpath(subworkpath,\"$(mtdstr)_cbcl_runtime_vs_fits.jld2\"))"))
     @eval (rng=($(ddsym)["rng"]))
-    submtdstrs = mtdstr == "sca" ? ["_sp"] : mtdstr == "admm" ? ["_nn"] : ["_sp_nn"]
+    submtdstrs = mtdstr == "lcsvd" ? ["_sp"] : mtdstr == "compnmf" ? ["_nn"] : ["_sp_nn"]
     for submtdstr in submtdstrs
+        @show submtdstr
         frpx = "$(mtdstr)$(submtdstr)"; dickeystr = "stat$(submtdstr)"
         # @eval ($(Symbol("$(frpx)_means")) = ($(ddsym)["stat$(submtdstr)"][1]))
         # @eval ($(Symbol("$(frpx)_stds")) = ($(ddsym)["stat$(submtdstr)"][2]))
@@ -61,14 +63,14 @@ end
 # admm_sp_upper = admm_sp_means + z*admm_sp_stds; admm_sp_lower = admm_sp_means - z*admm_sp_stds
 # admm_sp_nn_upper = admm_sp_nn_means + z*admm_sp_nn_stds; admm_sp_nn_lower = admm_sp_nn_means - z*admm_sp_nn_stds
 
-fig = Figure()
-ax1 = AMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Average Fit Value vs. Running Time")
-ax2 = AMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "Sparseness of W" #= yticklabelcolor = :red =# )
+fig = Figure(resolution=(600,400)); xlimits = (0,2); limits = (xlimits, nothing)
+ax1 = AMakie.Axis(fig[1, 1], limits=limits, xlabel = "time(sec)", ylabel = "fit", title = "Average Fit Value vs. Running Time")
+ax2 = AMakie.Axis(fig[1, 1], limits=limits, yaxisposition = :right, ylabel = "Sparseness of W" #= yticklabelcolor = :red =# )
 hidespines!(ax2)
 hidexdecorations!(ax2)
 
 lns = Dict(); bnds=Dict()
-for (i,(frpx, lbl)) in enumerate([("sca_sp","SMF (α=100)"),("admm_sp_nn","Comp. NMF (α=10)"),("hals_sp_nn","HALS (α=0.1)")])
+for (i,(frpx, lbl)) in enumerate([("lcsvd_sp","SMF (α ∈ [0.0001,0.01])"),("compnmf_nn","Comp. NMF"),("hals_sp_nn","HALS (α ∈ [0,5])")])
     # eval(print("$(frpx)_means"))
     ln1 = lines!(ax1, rng, eval(Symbol("$(frpx)1_means")), color=mtdcolors[i+1], label=lbl)
     bnd1 = band!(ax1, rng, eval(Symbol("$(frpx)1_lower")), eval(Symbol("$(frpx)1_upper")), color=mtdcoloras[i+1])
@@ -79,7 +81,7 @@ for (i,(frpx, lbl)) in enumerate([("sca_sp","SMF (α=100)"),("admm_sp_nn","Comp.
 end
 
 axislegend(ax1, position = :rt) # halign = :left, valign = :top
-axislegend(ax2, position = :rb) # halign = :left, valign = :top
+#axislegend(ax2, position = :rb) # halign = :left, valign = :top
 save(joinpath(subworkpath,"cbclface_fits.png"),fig,px_per_unit=2)
 
 

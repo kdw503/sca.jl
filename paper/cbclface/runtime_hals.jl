@@ -11,52 +11,44 @@ cd(workpath); Pkg.activate(".")
 subworkpath = joinpath(workpath,"paper","cbclface")
 
 include(joinpath(workpath,"setup_light.jl"))
-include(joinpath(scapath,"test","testdata.jl"))
-include(joinpath(scapath,"test","testutils.jl"))
-include(joinpath(workpath,"dataset.jl"))
-include(joinpath(workpath,"utils.jl"))
+include(joinpath(workpath,"setup_plot.jl"))
 
-dataset = :cbclface; SNR=0; inhibitindices=0; bias=0.1; initmethod=:lowrank; initpwradj=:wh_normalize
+dataset = :cbclface
 filter = dataset ∈ [:neurofinder,:fakecells] ? :meanT : :none; filterstr = "_$(filter)"
-datastr = dataset == :fakecells ? "_fc$(inhibitindices)_$(SNR)dB" : "_$(dataset)"
-subtract_bg=false
 
 if true
-    num_experiments = 50
-    sca_maxiter = 40; sca_inner_maxiter = 50; sca_ls_maxiter = 100
-    admm_maxiter = 500; admm_inner_maxiter = 0; admm_ls_maxiter = 0
-    hals_maxiter = 400
+    num_experiments = 50; lcsvd_maxiter = 80; compnmf_maxiter = 500; hals_maxiter = 400
 else
-    num_experiments = 2
-    sca_maxiter = 2; sca_inner_maxiter = 2; sca_ls_maxiter = 2
-    admm_maxiter = 2; admm_inner_maxiter = 0; admm_ls_maxiter = 0
-    hals_maxiter = 2
+    num_experiments = 2; lcsvd_maxiter = 2; compnmf_maxiter = 2; hals_maxiter = 2
 end
 
+X, imgsz, lengthT, ncells, gtncells, datadic = load_data(dataset; SNR=SNR, bias=bias, useCalciumT=true,
+        inhibitindices=inhibitindices, issave=false, isload=false, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
+(m,n,p) = (size(X)...,ncells)
+gtW, gtH = dataset == :fakecells ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
+X = LCSVD.noisefilter(filter,X)
+
+subtract_bg=false; sbgstr = subtract_bg ? "sbg" : "nosbg"
+
+if subtract_bg
+    rt1cd = @elapsed W, H = NMF.nndsvd(X, 1, variant=:ar) # rank 1 NMF
+    NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=60, α=0), X, W, H)
+    normalizeW!(W,H); imsave_data(dataset,joinpath(subworkpath,"Wr1"),W,H,imgsz,100; signedcolors=TestData.dgwm(), saveH=false)
+    plotH_data(joinpath(subworkpath,"Hr1_gtH"),H)
+    bg = W*fill(mean(H),1,n); X .-= bg
+end
+W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, ncells; initmethod=:nndsvd, svdmethod=:isvd)
+rt1 = @elapsed Wcd0, Hcd0 = NMF.nndsvd(X, ncells, variant=:ar);
+mfmethod = :HALS; maxiter = hals_maxiter; tol=-1
+
+# HALS
+prefix="hals"; @show prefix
+# W0, H0, Mw0, Mh0, Wp, Hp, D = initsemisca(X, ncells, initmethod=:isvd,poweradjust=:wh_normalize) # for penmetric = :SCA
+rt1 = @elapsed Wcd0, Hcd0 = NMF.nndsvd(X, ncells, variant=:ar);
+mfmethod = :HALS; αhals=0.1; maxiter = hals_maxiter; tol=-1 # αhals=0.6 
 αrng = 0:0.1:5
 for (iter, α) in enumerate(αrng)
 @show iter; flush(stdout)
-X, imgsz, lengthT, ncells, gtncells, datadic = load_data(dataset; SNR=SNR, bias=bias, useCalciumT=true,
-        inhibitindices=inhibitindices, issave=false, isload=false, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
-
-(m,n,p) = (size(X)...,ncells)
-gtW, gtH = dataset == :fakecells ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
-X = noisefilter(filter,X)
-
-if subtract_bg
-    rt1cd = @elapsed Wcd, Hcd = NMF.nndsvd(X, 1, variant=:ar) # rank 1 NMF
-    NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=60, α=0), X, Wcd, Hcd)
-    normalizeW!(Wcd,Hcd); imsave_data(dataset,"Wr1",Wcd,Hcd,imgsz,100; signedcolors=dgwm(), saveH=false)
-    close("all"); plot(Hcd'); savefig("Hr1.png"); plot(gtH[:,inhibitindices]); savefig("Hr1_gtH.png")
-    bg = Wcd*fill(mean(Hcd),1,n); X .-= bg
-end
-rt1 = @elapsed Wcd0, Hcd0 = NMF.nndsvd(X, ncells, variant=:ar);
-
-# HALS
-@show "HALS"
-W0, H0, Mw0, Mh0, Wp, Hp, D = initsemisca(X, ncells, initmethod=:nndsvd,poweradjust=:wh_normalize)
-rt1 = @elapsed Wcd0, Hcd0 = NMF.nndsvd(X, ncells, variant=:ar);
-mfmethod = :HALS; maxiter = hals_maxiter; tol=-1
 for (tailstr,) in [("_sp_nn",)]
     @show tailstr; flush(stdout)
     dd = Dict()
@@ -73,7 +65,7 @@ for (tailstr,) in [("_sp_nn",)]
         metadata = Dict()
         metadata["maxiter"] = maxiter; metadata["alpha"] = α
     end
-    save(joinpath(subworkpath,"hals","hals$(tailstr)_alpha_results$(iter).jld2"),"metadata",metadata,"data",dd)
+    save(joinpath(subworkpath,prefix,"$(prefix)$(tailstr)_alpha_results$(iter).jld2"),"metadata",metadata,"data",dd)
 end
 
 end
@@ -84,7 +76,7 @@ num_expriments=50
 rt2_min = Inf
 for tailstr in ["_sp_nn"]
     for iter in 1:num_expriments
-        dd = load(joinpath(subworkpath,"hals","hals$(tailstr)_alpha_results$(iter).jld2"),"data")
+        dd = load(joinpath(subworkpath,prefix,"$(prefix)$(tailstr)_alpha_results$(iter).jld2"),"data")
         rt2s = dd["rt2s"]
         rt2_min = min(rt2_min,rt2s[end])
     end
@@ -98,7 +90,7 @@ for tailstr in ["_sp_nn"]
     afs=[]; sws=[]
     for iter in 1:num_expriments
         @show tailstr, iter
-        dd = load(joinpath(subworkpath,"hals","hals$(tailstr)_alpha_results$(iter).jld2"))
+        dd = load(joinpath(subworkpath,prefix,"$(prefix)$(tailstr)_alpha_results$(iter).jld2"))
         rt2s = dd["data"]["rt2s"]; avgfits = dd["data"]["avgfits"]; sparseWs = dd["data"]["sparseWs"]
         lr = length(rt2s); la = length(avgfits)
         lr != la && (l=min(lr,la); rt2s=rt2s[1:l]; avgfits=avgfits[1:l])

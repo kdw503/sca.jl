@@ -26,3 +26,4 @@ end
 # Wong colors : Blue, Orange, Bluish green, Reddish purple, Sky blue, Vermillion, Yellow
 mtdcolors = convert.(RGB,Makie.wong_colors()); pushfirst!(mtdcolors,RGB{Float32}(0.0f0,0.0f0,0.0f0))
 alpha = 0.2; mtdcoloras = convert.(RGBA,mtdcolors,alpha)
+dtcolors = distinguishable_colors(15; lchoices=range(0, stop=50, length=15))
