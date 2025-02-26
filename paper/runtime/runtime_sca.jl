@@ -211,7 +211,7 @@ end
 include(joinpath(workpath,"setup_plot.jl"))
 alpha = 0.2; cls = distinguishable_colors(10); clbs = convert.(RGBA,cls,alpha)
 
-plotrng = :
+plotrng = Colon()
 fig = Figure(resolution=(600,400))
 ax = AMakie.Axis(fig[1, 1], limits = ((0,0.3), nothing), xlabel = "time(sec)", ylabel = "average fit", title = "Average Fit Value vs. Running Time")
 
@@ -288,7 +288,7 @@ end
 include(joinpath(workpath,"setup_plot.jl"))
 alpha = 0.2; cls = distinguishable_colors(12); clbs = convert.(RGBA,cls,alpha)
 
-plotrng = :
+plotrng = Colon()
 fig = Figure(resolution=(600,400))
 ax = AMakie.Axis(fig[1, 1], limits = ((0,0.3), nothing), xlabel = "time(sec)", ylabel = "average fit", title = "Average Fit Value vs. Running Time")
 

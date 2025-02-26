@@ -50,32 +50,22 @@ sqfactor = Int(floor(sqrt(factor)))
 imgsz = (sqfactor*imgsz0[1],sqfactor*imgsz0[2]); lengthT = factor*1000; sigma = sqfactor*5.0
 maskW=rand(imgsz...).<maskth; maskW = vec(maskW); maskH=rand(lengthT).<maskth;
 
-meanS33=[]; meanS53=[]; meanS33s=[]; meanS53s=[]
-meanT33=[]; meanT35=[]; meanT37=[]; meanST33=[]; meanST35=[]; meanST37=[]; none00=[]
+for (filter,flS,flT) in [(:meanS,3,3),(:meanS,5,3),(:meanT,3,3),(:meanT,3,5),(:meanT,3,7),(:meanST,3,3),(:meanST,3,5),(:meanST,3,7),(:none,0,0)]
+afs = []; afrSs =[]
 for iter in 1:num_experiments
 #@show iter; flush(stdout)
 X, imsz, lhT, ncs, gtncells, datadic = load_data(dataset; sigma=sigma, imgsz=imgsz, lengthT=lengthT, SNR=SNR, bias=bias, useCalciumT=true,
         inhibitindices=inhibitindices, issave=false, isload=false, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
-X, imsz, lhT, ncs, gtncells, datadic = load_data(dataset; sigma=sigma, imgsz=imgsz, lengthT=lengthT, SNR=SNR, bias=bias, useCalciumT=true,
-        inhibitindices=inhibitindices, issave=false, isload=false, gtincludebg=false, save_gtimg=true, save_maxSNR_X=true, save_X=true);
-
 (m,n,p) = (size(X)...,ncells)
 gtW, gtH = dataset == :fakecells ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
-
-for (filter,flS,flT) in [(:meanS,3,3),(:meanS,5,3),(:meanT,3,3),(:meanT,3,5),(:meanT,3,7),(:meanST,3,3),(:meanST,3,5),(:meanST,3,7),(:none,0,0)]
 if filter == :meanST 
     Xlpf = LCSVD.noisefilter(:meanS,X;filterlength=flS)
     Xlpf = LCSVD.noisefilter(:meanT,Xlpf;filterlength=flT)
-elseif filter ∈ [:meanS]
+elseif filter ∈ [:meanS,:meanSr]
     Xlpf = LCSVD.noisefilter(:meanS,X;filterlength=flS)
 elseif filter == :meanT
     Xlpf = LCSVD.noisefilter(:meanT,X;filterlength=flT)
-elseif filter == :none
-    Xlpf = X
 end
-maxindices = argmax.(eachcol(gtH))
-maxSNR_Xlpf = Xlpf[:,[maxindices...]]
-TestData.imsaveW(joinpath(subworkpath,"Xlpf.png"),maxSNR_Xlpf,imgsz,colors=TestData.bbw())
 
 if subtract_bg
     rt1cd = @elapsed Wcd, Hcd = NMF.nndsvd(Xlpf, 1, variant=:ar) # rank 1 NMF
@@ -125,9 +115,9 @@ if prefix in ["lcsvd_precon"]
         rt2 = @elapsed rst0 = LCSVD.solve!(alg, Xlpf, W0, H0, D, M, N);
         Wlc, Hlc = rst0.W, rst0.H
         avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, Wlc, Hlc; clamp=false)
-        eval(Meta.parse("push!($(filter)$(flS)$(flT),avgfit)"))
+        push!(afs,avgfit)
         LCSVD.normalizeW!(Wlc,Hlc)#; Wlc,Hlc = LCSVD.sortWHslices(Wlc,Hlc)
-        fprex = "$(prefix)$(SNR)db$(iter)$(filter)"
+        fprex = "$(prefix)$(SNR)db$(filter)"
         # precondstr = useprecond ? "_precond" : ""
         # useLPFstr = usedenoiseW0H0 ? "_$(alg.denoisefilter)" : ""
         fname = joinpath(subworkpath,"$(filter)_$(flS)_$(flT)",prefix,"$(fprex)_a$(α)_b$(β)_it$(rst0.niters)_rt$(rt2)_af$(avgfit)")
@@ -136,7 +126,7 @@ if prefix in ["lcsvd_precon"]
         if filter == :meanS
             Wlc = X*Hlc'*inv(Hlc*Hlc')
             avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, Wlc, Hlc; clamp=false)
-            eval(Meta.parse("push!($(filter)$(flS)$(flT)s,avgfit)"))
+            push!(afrSs,avgfit)
             LCSVD.normalizeW!(Wlc,Hlc)#; Wlc,Hlc = LCSVD.sortWHslices(Wlc,Hlc)
             fname = joinpath(subworkpath,"$(filter)_$(flS)_$(flT)",prefix,"$(fprex)_a$(α)_b$(β)_it$(rst0.niters)_rt$(rt2)_af$(avgfit)_rS")
             TestData.imsave_data_gt(dataset,fname*"_gt", Wlc,Hlc,gtW,gtH,imgsz,100; saveH=false, verbose=false)
@@ -150,18 +140,11 @@ if prefix in ["lcsvd_precon"]
     # end
 end
 end # methods
-end # filter
 end # iter
-for (filter,flS,flT) in [(:meanS,3,3),(:meanS,5,3),(:meanT,3,3),(:meanT,3,5),(:meanT,3,7),(:meanST,3,3),(:meanST,3,5),(:meanST,3,7),(:none,0,0)]
-    eval(Meta.parse("af=sum($(filter)$(flS)$(flT))/num_experiments"))
-    @show "$(filter)$(flS)$(flT)", af
-    if filter == :meanS
-        eval(Meta.parse("af=sum($(filter)$(flS)$(flT)s)/num_experiments"))
-        @show "$(filter)$(flS)$(flT)s", af
-    end
-end
-
-
+    af = sum(afs)/num_experiments
+    afrS = filter == :meanS ? sum(afrSs)/num_experiments : 0
+    @show filter, flS, flT, af, afrS
+end # filter
 
 
 if prefix == "hals"
@@ -192,8 +175,6 @@ if prefix == "hals"
         save(joinpath(subworkpath,"$(filter)_$(flS)_$(flT)",prefix,"$(fprex)$(tailstr)_results$(iter).jld2"),"metadata",metadata,"data",dd)
     end
 end
-end # for methods
-end # for iter
 
 # Q = qr(randn(8, 8))
 # Q = Q.Q

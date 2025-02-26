@@ -180,8 +180,6 @@ if prefix == "hals"
         save(joinpath(subworkpath,"$(filter)_$(flS)_$(flT)",prefix,"$(fprex)$(tailstr)_results$(iter).jld2"),"metadata",metadata,"data",dd)
     end
 end
-end # for methods
-end # for iter
 
 # Q = qr(randn(8, 8))
 # Q = Q.Q

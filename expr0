@@ -1,3 +1,0 @@
-#!/bin/bash
-# julia         file              dataset,   SNRs, initmethod, maxiter, αs, βs, optimmethod,   reg, sd_group, useRelaxedL1
-/usr/local/julia/bin/julia $MYSTORAGE/work/julia/sca/runtime_all.jl

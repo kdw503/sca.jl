@@ -12,6 +12,7 @@ subworkpath = joinpath(workpath,"paper","initialization")
 
 include(joinpath(workpath,"setup_light.jl"))
 include(joinpath(workpath,"setup_plot.jl"))
+using IncrementalSVD
 
 #= This is ten times slower than direct call in the python
 using PyCall
@@ -25,54 +26,59 @@ R = skue.randomized_range_finder(X', size = ncells + r_ov, n_iter = 3)
 rt = time()-rt0
 =#
 
-if false
-    num_experiments = 50; ncellsrng = 4:2:200; factorrng=1:10
+if true
+    num_experiments = 10; ncellsrng = 4:2:100; factorrng=1:10
 else
     num_experiments = 2; ncellsrng = 5:6; factorrng=1:2
 end
 
 dataset = :fakecells; inhibitindices=0; bias=0.1; SNR=0; factor = 5; ncells = 15
 imgsz0 = (40,20); lengthT0=1000
+initisvd(X,noc) = ((U,s)=IncrementalSVD.isvd(X,noc); H = U'*X ; (U, H, copy(U), copy(H))) # H isn't normalized one
 
 # ncells
 sqfactor = sqrt(factor)
 imgsz = (Int(floor(sqfactor*imgsz0[1])),Int(floor(sqfactor*imgsz0[2]))); lengthT = factor*lengthT0; sigma = round(sqfactor*5.0)
-isvdmeans=Float64[]; isvdstds=Float64[]
+isvdmeans=Float64[]; isvdstds=Float64[];incsvdmeans=Float64[]; incsvdstds=Float64[]
 lowrankmeans=Float64[]; lowrankstds=Float64[]
 nndsvdmeans=Float64[]; nndsvdstds=Float64[]; rnndsvdmeans=Float64[]; rnndsvdstds=Float64[]
 for (iter, ncl) in enumerate(ncellsrng)
     @show ncl; flush(stdout)
 
-isvdrt1s = []; nndsvdrt1s=[]; rnndsvdrt1s=[]
+isvdrt1s = []; incsvdrt1s = [];  nndsvdrt1s=[]; rnndsvdrt1s=[]
 lowrankrt1s=[]; rlowrankrt1s=[]; 
 for i in 1:num_experiments
     X, imsz, lhT, ncs, gtncells, datadic = load_data(:fakecells; sigma=sigma, imgsz=imgsz, lengthT=lengthT, SNR=SNR, bias=0.1, useCalciumT=true,
             inhibitindices=0, issave=false, isload=false, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
     isvdrt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, ncl; initmethod=:isvd, svdmethod=:isvd)
+    incsvdrt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, ncl; initmethod=:custom, initfn=initisvd)
     lowrankrt1 = @elapsed  CompNMF.compmat(X, Wp, Hp; w=4, rov=10)
     nndsvdrt1 = @elapsed  NMF.nndsvd(X, ncl, variant=:ar, initdata=svd(X))
     rnndsvdrt1 = @elapsed  NMF.nndsvd(X, ncl, variant=:ar)
-    push!(isvdrt1s,isvdrt1); push!(nndsvdrt1s,nndsvdrt1); push!(rnndsvdrt1s,rnndsvdrt1)
+    push!(isvdrt1s,isvdrt1); push!(incsvdrt1s,incsvdrt1); push!(nndsvdrt1s,nndsvdrt1); push!(rnndsvdrt1s,rnndsvdrt1)
     push!(lowrankrt1s,lowrankrt1)
 end
 isvdmean = mean(isvdrt1s); isvdstd = std(isvdrt1s)
+incsvdmean = mean(incsvdrt1s); incsvdstd = std(incsvdrt1s)
 lowrankmean = mean(lowrankrt1s); lowrankstd = std(lowrankrt1s)
 nndsvdmean = mean(nndsvdrt1s); nndsvdstd = std(nndsvdrt1s)
 rnndsvdmean = mean(rnndsvdrt1s); rnndsvdstd = std(rnndsvdrt1s)
 push!(isvdmeans,isvdmean); push!(isvdstds,isvdstd)
+push!(incsvdmeans,incsvdmean); push!(incsvdstds,incsvdstd)
 push!(lowrankmeans,lowrankmean); push!(lowrankstds,lowrankstd)
 push!(nndsvdmeans,nndsvdmean); push!(nndsvdstds,nndsvdstd)
 push!(rnndsvdmeans,rnndsvdmean); push!(rnndsvdstds,rnndsvdstd)
 end
 save(joinpath(subworkpath,"ncellsrng_vs_rt1s.jld2"),
-            "ncellsrng",ncellsrng, "isvdmeans",isvdmeans,"isvdstds",isvdstds,
+            "ncellsrng",ncellsrng, "isvdmeans",isvdmeans,"isvdstds",isvdstds, "incsvdmeans",incsvdmeans,"incsvdstds",incsvdstds,
             "lowrankmeans",lowrankmeans,"lowrankstds",lowrankstds,
             "nndsvdmeans",nndsvdmeans,"nndsvdstds",nndsvdstds, "rnndsvdmeans",rnndsvdmeans,"rnndsvdstds",rnndsvdstds)
-
 z = 0.5
 dd = load(joinpath(subworkpath,"ncellsrng_vs_rt1s.jld2")); ncellsrng = dd["ncellsrng"]
 sca_means = dd["isvdmeans"]; sca_stds = dd["isvdstds"]
 sca_upper = sca_means + z*sca_stds; sca_lower = sca_means - z*sca_stds
+sca2_means = dd["incsvdmeans"]; sca2_stds = dd["incsvdstds"]
+sca2_upper = sca2_means + z*sca2_stds; sca2_lower = sca2_means - z*sca2_stds
 hals_means = dd["nndsvdmeans"]; hals_stds = dd["nndsvdstds"]
 hals_upper = hals_means + z*hals_stds; hals_lower = hals_means - z*hals_stds
 hals_r_means = dd["rnndsvdmeans"]; hals_r_stds = dd["rnndsvdstds"]
@@ -81,55 +87,60 @@ admm_means = dd["lowrankmeans"]; admm_stds = dd["lowrankstds"]
 admm_upper = admm_means + z*admm_stds; admm_lower = admm_means - z*admm_stds
 
 fig = Figure(resolution=(500,280))
-ax1 = AMakie.Axis(fig[1, 1], limits = ((0,100), (-1,40)), xlabel = "number of components", ylabel = "time(sec)")#, title = "Number of components vs. Initialization time")
+ax1 = AMakie.Axis(fig[1, 1], limits = ((0,100), (-1,25)), xlabel = "number of components", ylabel = "time(sec)")#, title = "Number of components vs. Initialization time")
 
 lin = []
 push!(lin,lines!(ax1, ncellsrng, sca_means, color=mtdcolors[2], label="ISVD"))
 band!(ax1, ncellsrng, sca_lower, sca_upper, color=mtdcoloras[2])
+push!(lin,lines!(ax1, ncellsrng, sca2_means, color=mtdcolors[4], label="IncrementalSVD"))
+band!(ax1, ncellsrng, sca2_lower, sca2_upper, color=mtdcoloras[4])
 push!(lin,lines!(ax1, ncellsrng, admm_means, color=mtdcolors[5], label="Compression"))
 band!(ax1, ncellsrng, admm_lower, admm_upper, color=mtdcoloras[5])
 push!(lin,lines!(ax1, ncellsrng, hals_means, color=mtdcolors[7], linestyle=:dash, label="NNDSVD(SVD)"))
 band!(ax1, ncellsrng, hals_lower, hals_upper, color=mtdcoloras[7])
 push!(lin,lines!(ax1, ncellsrng, hals_r_means, color=mtdcolors[3], label="NNDSVD(RSVD)"))
 band!(ax1, ncellsrng, hals_r_lower, hals_r_upper, color=mtdcoloras[3])
-labels = ["ISVD","Compression","NNDSVD(SVD)","NNDSVD(RSVD)"]
+labels = ["ISVD","incrementalSVD","Compression","NNDSVD(SVD)","NNDSVD(RSVD)"]
 #axislegend(ax1, labelsize=20, position = :lt) # halign = :left, valign = :top
 fig[:,2] = Legend(fig[:,1],lin,labels)
 save(joinpath(subworkpath,"ncellsrng_vs_rt1s.png"),fig,px_per_unit=2)
 
 
 # factor
-isvdmeans=Float64[]; isvdstds=Float64[]
+isvdmeans=Float64[]; isvdstds=Float64[]; incsvdmeans=Float64[]; incsvdstds=Float64[]
 lowrankmeans=Float64[]; lowrankstds=Float64[]
 nndsvdmeans=Float64[]; nndsvdstds=Float64[]; rnndsvdmeans=Float64[]; rnndsvdstds=Float64[]
 for (iter, factor) in enumerate(factorrng)
     @show factor; flush(stdout)
     sqfactor = sqrt(factor)
     imgsz = (Int(floor(sqfactor*imgsz0[1])),Int(floor(sqfactor*imgsz0[2]))); lengthT = factor*lengthT0; sigma = sqfactor*5.0
-    isvdrt1s = []; nndsvdrt1s=[]; rnndsvdrt1s=[]
+    isvdrt1s = []; incsvdrt1s = []; nndsvdrt1s=[]; rnndsvdrt1s=[]
     lowrankrt1s=[]
     for i in 1:num_experiments
         X, imsz, lhT, ncs, gtncells, datadic = load_data(:fakecells; sigma=5.0, imgsz=imgsz, lengthT=lengthT, SNR=SNR, bias=0.1, useCalciumT=true,
                 inhibitindices=0, issave=false, isload=false, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
         isvdrt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, ncells; initmethod=:isvd, svdmethod=:isvd)
+        incsvdrt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, ncells; initmethod=:custom, initfn=initisvd)
         lowrankrt1 = @elapsed  CompNMF.compmat(X, Wp, Hp; w=4, rov=10)
         nndsvdrt1 = @elapsed NMF.nndsvd(X, ncells, variant=:ar, initdata=svd(X))
         rnndsvdrt1 = @elapsed NMF.nndsvd(X, ncells, variant=:ar)
-        push!(isvdrt1s,isvdrt1); 
+        push!(isvdrt1s,isvdrt1); push!(incsvdrt1s,incsvdrt1)
         push!(lowrankrt1s,lowrankrt1)
         push!(nndsvdrt1s,nndsvdrt1); push!(rnndsvdrt1s,rnndsvdrt1)
     end
     isvdmean = mean(isvdrt1s); isvdstd = std(isvdrt1s)
+    incsvdmean = mean(incsvdrt1s); incsvdstd = std(incsvdrt1s)
     lowrankmean = mean(lowrankrt1s); lowrankstd = std(lowrankrt1s)
     nndsvdmean = mean(nndsvdrt1s); nndsvdstd = std(nndsvdrt1s)
     rnndsvdmean = mean(rnndsvdrt1s); rnndsvdstd = std(rnndsvdrt1s)
     push!(isvdmeans,isvdmean); push!(isvdstds,isvdstd)
+    push!(incsvdmeans,incsvdmean); push!(incsvdstds,incsvdstd)
     push!(nndsvdmeans,nndsvdmean); push!(nndsvdstds,nndsvdstd)
     push!(rnndsvdmeans,rnndsvdmean); push!(rnndsvdstds,rnndsvdstd)
     push!(lowrankmeans,lowrankmean); push!(lowrankstds,lowrankstd)
 end
 save(joinpath(subworkpath,"factorrng_vs_rt1s.jld2"),
-            "factorrng",factorrng, "isvdmeans",isvdmeans,"isvdstds",isvdstds,
+            "factorrng",factorrng, "isvdmeans",isvdmeans,"isvdstds",isvdstds, "incsvdmeans", incsvdmeans,"incsvdstds",incsvdstds,
            "lowrankmeans",lowrankmeans,"lowrankstds",lowrankstds,
             "nndsvdmeans",nndsvdmeans,"nndsvdstds",nndsvdstds, "rnndsvdmeans",rnndsvdmeans,"rnndsvdstds",rnndsvdstds)
 
@@ -137,6 +148,8 @@ z = 0.5
 dd = load(joinpath(subworkpath,"factorrng_vs_rt1s.jld2")); factorrng = dd["factorrng"]
 sca_means = dd["isvdmeans"]; sca_stds = dd["isvdstds"]
 sca_upper = sca_means + z*sca_stds; sca_lower = sca_means - z*sca_stds
+sca2_means = dd["incsvdmeans"]; sca2_stds = dd["incsvdstds"]
+sca2_upper = sca2_means + z*sca2_stds; sca2_lower = sca2_means - z*sca2_stds
 admm_means = dd["lowrankmeans"]; admm_stds = dd["lowrankstds"]
 admm_upper = admm_means + z*admm_stds; admm_lower = admm_means - z*admm_stds
 hals_means = dd["nndsvdmeans"]; hals_stds = dd["nndsvdstds"]
@@ -145,22 +158,24 @@ hals_r_means = dd["rnndsvdmeans"]; hals_r_stds = dd["rnndsvdstds"]
 hals_r_upper = hals_r_means + z*hals_r_stds; hals_r_lower = hals_r_means - z*hals_r_stds
 
 fig = Figure(resolution=(500,280))
-ax1 = AMakie.Axis(fig[1, 1], xlabel = "data size (MB)", ylabel = "time(sec)",
+ax1 = AMakie.Axis(fig[1, 1], limits=(nothing,(0,10)), xlabel = "data size (MB)", ylabel = "time(sec)",
     xtickformat = values -> ["$(Int(round(value^2*6.4)))" for value in values]) # factor^2*40*20*1000*64bit(Float64)/8bit/1000000(Mega) MByte
 
 lin = []
 push!(lin,lines!(ax1, factorrng, sca_means, color=mtdcolors[2], label="ISVD"))
 band!(ax1, factorrng, sca_lower, sca_upper, color=mtdcoloras[2])
+push!(lin,lines!(ax1, factorrng, sca2_means, color=mtdcolors[4], label="IncrementalSVD"))
+band!(ax1, factorrng, sca2_lower, sca2_upper, color=mtdcoloras[4])
 push!(lin,lines!(ax1, factorrng, admm_means, color=mtdcolors[5], label="Compression"))
 band!(ax1, factorrng, admm_lower, admm_upper, color=mtdcoloras[5])
 push!(lin,lines!(ax1, factorrng, hals_means, linestyle=:dash, color=mtdcolors[7], label="NNDSVD(SVD)"))
 band!(ax1, factorrng, hals_lower, hals_upper, color=mtdcoloras[7])
 push!(lin,lines!(ax1, factorrng, hals_r_means, color=mtdcolors[3], label="NNDSVD(RSVD)"))
 band!(ax1, factorrng, hals_r_lower, hals_r_upper, color=mtdcoloras[3])
-labels = ["ISVD","Compression","NNDSVD(SVD)","NNDSVD(RSVD)"]
+labels = ["ISVD","IncrementalSVD","Compression","NNDSVD(SVD)","NNDSVD(RSVD)"]
 #axislegend(ax1, labelsize=20, position = :lt) # halign = :left, valign = :top
 fig[:,2] = Legend(fig[:,1],lin,labels)
-save(joinpath(subworkpath,"factorrng_vs_rt1s.png"),fig,px_per_unit=2)
+save(joinpath(subworkpath,"factorrng_vs_rt1s(0,10).png"),fig,px_per_unit=2)
 
 
 
@@ -175,7 +190,7 @@ imge = load(joinpath(subworkpath,"avgfits0db1f15s_all.png"))
 imgf = load(joinpath(subworkpath,"avgfits0db1f50s_all.png"))
 
 f = Figure(resolution = (1500,800))
-ax11=AMakie.Axis(f[1,1], title ="(a) Data sive vs. runtime (NOC=15)", titlesize=fontsize, width=550,aspect = DataAspect())
+ax11=AMakie.Axis(f[1,1], title ="(a) Data size vs. runtime (NOC=15)", titlesize=fontsize, width=550,aspect = DataAspect())
 hidedecorations!(ax11); hidespines!(ax11)
 ax12=AMakie.Axis(f[1,2], title="(b) HALS result of -10dB 15NOC", titlesize=fontsize, aspect = DataAspect())
 hidedecorations!(ax12); hidespines!(ax12)

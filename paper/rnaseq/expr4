@@ -1,0 +1,15 @@
+#!/bin/bash
+# export resource='select[model==Intel_Xeon_Gold6242CPU280GHz && mem>64000 && tmp>2] rusage[mem=64000, tmp=2]'
+# smjuliajob -R "$resource" $MYSTORAGE/work/julia/sca/paper/rnaseq/expr4
+# julia         file             dir_name methods num_expriments SNR factor ncells lcsvd_maxiter hals_maxiter hals_α compnmf_maxiter
+export jlexec=/usr/local/julia/bin/julia
+# export jlfile=$MYSTORAGE/work/julia/sca/paper/rnaseq/runtime_pcb.jl
+# lscpu >> $MYSTORAGE/work/julia/sca/paper/rnaseq/pcb3_machine.txt
+# $jlexec $jlfile \"WMB-10Xv2-HY\" 0 500 2500 0.005 0.005 5.0 5.0 0
+# $jlexec $jlfile \"WMB-10Xv2-HY\" 0 500 0 0.005 0.005 5.0 5.0 0
+export jlfile=$MYSTORAGE/work/julia/sca/paper/rnaseq/runtime_small_pcb_alpha_both.jl
+$jlexec $jlfile 5 0 1000 1e-6 false
+export jlfile=$MYSTORAGE/work/julia/sca/paper/rnaseq/runtime_small_pcb_beta_both.jl
+$jlexec $jlfile 5 0 1000 1e-6 false
+export jlfile=$MYSTORAGE/work/julia/sca/paper/rnaseq/runtime_small_pcb_nac_both.jl
+$jlexec $jlfile 5 0 1000 1e-6 false

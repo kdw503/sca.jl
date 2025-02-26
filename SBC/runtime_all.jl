@@ -253,3 +253,22 @@ for iter in iters
         @warn e
     end
 end
+
+function sbc(U::AbstractMatrix; kwargs...)
+    r = size(U, 2); noc = 500
+    M = Matrix{eltype(U)}(undef, r, noc)
+    m2 = zeros(r)
+    q = zeros(r)
+    for j in 1:noc
+        @show j
+        fill!(q, 0)
+        q[j] = 1
+        # Perform a Gramm-Schmidt orthogonalization of q against the columns of M[:,1:j-1]
+        for k in 1:j-1
+            q .-= (M[j,k] / m2[k]) .* M[:,k]
+        end
+        M[:,j], _ = sbc(U, q; kwargs...)
+        m2[j] = sum(abs2, @view(M[:,j]))
+    end
+    return M
+end

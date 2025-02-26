@@ -57,7 +57,7 @@ end
 
 alpha = 0.2; cls = distinguishable_colors(10); clbs = convert.(RGBA,cls,alpha)
 
-plotlength = min(length(rng),50); plotrng = :
+plotlength = min(length(rng),50); plotrng = Colon()
 fig = Figure(resolution=(400,300))
 ax = AMakie.Axis(fig[1, 1], limits = ((0,min(0.3,plottime)), nothing), xlabel = "time(sec)", ylabel = "average fit", title = "Average Fit Value vs. Running Time")
 

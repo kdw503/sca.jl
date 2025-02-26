@@ -61,7 +61,7 @@ rt2 = @elapsed CompNMF.solve!(CompNMF.CompressedNMF{Float64}(maxiter=maxiter, to
                     gtW=gtW, gtH=gtH, maskW=maskW, maskH=maskH)
 avgfit, ml, merrval, rerrs = SCA.matchedfitval(gtW, gtH, Wcn, Hcn; clamp=false)
 normalizeW!(Wcn,Hcn); W3,H3 = sortWHslices(Wcn,Hcn)
-fprex = "halse$(factor)"
+fprex = "compnmf$(factor)"
 fname = joinpath(workpath,"$(fprex)_af$(avgfit)_it$(maxiter)_rt$(rt2)")
 #imsave_data(dataset,fname,W3,H3,imgsz,100; saveH=false)
 TestData.imsave_data_gt(dataset,fname*"_gt", W3,H3,gtW,gtH,imgsz,100; saveH=false)

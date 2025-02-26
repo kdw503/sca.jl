@@ -62,103 +62,18 @@ end
 
 
 z = 0.5
-plottime = Inf
-for prefix in ["lcsvd_precon","compnmf","hals"]
-    ddstr = "dd$(prefix)"; ddsym = Symbol(ddstr)
-#    @eval (($ddsym)=(load("$(prefix)_runtime_vs_avgfits.jld2"))) # this doens't work 'prefix' refer global variable
-    eval(Meta.parse("$(ddstr)=load(joinpath(subworkpath,\"$(prefix)\",\"$(prefix)_cbcl_runtime_vs_fits.jld2\"))"))
-    @eval (rng=($(ddsym)["rng"]))
-    plottime = plottime >= rng[end] ? rng[end] : plottime
-    submtdstrs = prefix == "lcsvd_precon" ? ["_sp"] : prefix == "compnmf" ? ["_nn"] : ["_sp_nn"]
-    for submtdstr in submtdstrs
-        frpx = "$(prefix)$(submtdstr)"; dickeystr = "stat$(submtdstr)"
-        # @eval ($(Symbol("$(frpx)_means")) = ($(ddsym)["stat$(submtdstr)"][1]))
-        # @eval ($(Symbol("$(frpx)_stds")) = ($(ddsym)["stat$(submtdstr)"][2]))
-        eval(Meta.parse("$(frpx)1_means=$(ddstr)[\"stat$(submtdstr)1\"][1]"))
-        eval(Meta.parse("$(frpx)1_stds=$(ddstr)[\"stat$(submtdstr)1\"][2]"))
-        @eval ($(Symbol("$(frpx)1_upper")) = ($(Symbol("$(frpx)1_means")) + z*$(Symbol("$(frpx)1_stds"))))
-        @eval ($(Symbol("$(frpx)1_lower")) = ($(Symbol("$(frpx)1_means")) - z*$(Symbol("$(frpx)1_stds"))))
-        eval(Meta.parse("$(frpx)2_means=$(ddstr)[\"stat$(submtdstr)2\"][1]"))
-        eval(Meta.parse("$(frpx)2_stds=$(ddstr)[\"stat$(submtdstr)2\"][2]"))
-        @eval ($(Symbol("$(frpx)2_upper")) = ($(Symbol("$(frpx)2_means")) + z*$(Symbol("$(frpx)2_stds"))))
-        @eval ($(Symbol("$(frpx)2_lower")) = ($(Symbol("$(frpx)2_means")) - z*$(Symbol("$(frpx)2_stds"))))
-    end
-end
 
-#================================= plot ranged alpha ===================#
-# z = 0.5
-# plottime = Inf
-# for mtdstr in ["lcsvd_precon","compnmf","hals"]
-#     ddstr = "dd$(mtdstr)"; ddsym = Symbol(ddstr)
-# #    @eval (($ddsym)=(load("$(mtdstr)_runtime_vs_avgfits.jld2"))) # this doens't work 'mtdstr' refer global variable
-#     eval(Meta.parse("$(ddstr)=load(joinpath(subworkpath,\"$(mtdstr)_cbcl_alpha_runtime_vs_fits.jld2\"))"))
-#     # @eval (rng=($(ddsym)["rng"]))
-#     rng = eval(Meta.parse("$(ddsym)[\"rng\"]"))
-#     eval(Meta.parse("$(mtdstr)rng=$(ddsym)[\"rng\"]"))
-#     plottime = plottime > rng[end] ? rng[end] : plottime
-#     submtdstrs = mtdstr == "sca" ? ["_sp"] : mtdstr == "admm" ? ["_nn"] : ["_sp_nn"]
-#     for submtdstr in submtdstrs
-#         frpx = "$(mtdstr)$(submtdstr)"; dickeystr = "stat$(submtdstr)"
-#         # @eval ($(Symbol("$(frpx)_means")) = ($(ddsym)["stat$(submtdstr)"][1]))
-#         # @eval ($(Symbol("$(frpx)_stds")) = ($(ddsym)["stat$(submtdstr)"][2]))
-#         eval(Meta.parse("$(frpx)1_means=$(ddstr)[\"stat$(submtdstr)1\"][1]"))
-#         eval(Meta.parse("$(frpx)1_stds=$(ddstr)[\"stat$(submtdstr)1\"][2]"))
-#         @eval ($(Symbol("$(frpx)1_upper")) = ($(Symbol("$(frpx)1_means")) + z*$(Symbol("$(frpx)1_stds"))))
-#         @eval ($(Symbol("$(frpx)1_lower")) = ($(Symbol("$(frpx)1_means")) - z*$(Symbol("$(frpx)1_stds"))))
-#         eval(Meta.parse("$(frpx)2_means=$(ddstr)[\"stat$(submtdstr)2\"][1]"))
-#         eval(Meta.parse("$(frpx)2_stds=$(ddstr)[\"stat$(submtdstr)2\"][2]"))
-#         @eval ($(Symbol("$(frpx)2_upper")) = ($(Symbol("$(frpx)2_means")) + z*$(Symbol("$(frpx)2_stds"))))
-#         @eval ($(Symbol("$(frpx)2_lower")) = ($(Symbol("$(frpx)2_means")) - z*$(Symbol("$(frpx)2_stds"))))
-#     end
-# end
-
-# mtdcolors = [RGB{N0f8}(0.00,0.00,0.00),RGB{N0f8}(0.00,0.45,0.70),RGB{N0f8}(0.90,0.62,0.00),
-#              RGB{N0f8}(0.00,0.62,0.45),RGB{N0f8}(0.80,0.47,0.65),RGB{N0f8}(0.34,0.71,0.91),
-#              RGB{N0f8}(0.84,0.37,0.00),RGB{N0f8}(0.94,0.89,0.26)]
-
-fontsize = 20
-fig = Figure(resolution = (800,400))
-ax11_1 = AMakie.Axis(fig[1, 1], limits = ((0,min(2,plottime)), nothing), xlabel = "time(sec)", xlabelsize=fontsize, xticklabelsize=fontsize,
-        ylabel = "fit", ylabelsize=fontsize, yticklabelsize=fontsize)  # title = "Fit and Sparsity Values vs. Running Time"
-ax11_2 = AMakie.Axis(fig[1, 1], limits = ((0,min(2,plottime)), nothing), yaxisposition = :right,
-        ylabel = "sparsity |W|", ylabelsize=fontsize, yticklabelsize=fontsize #= yticklabelcolor = :red =# )
-hidespines!(ax11_2)
-hidexdecorations!(ax11_2)
-
-plotrng = Colon()
-ln1s = []; ln2s = []; lbls=[]
-for (i,(mtdstr,submtdstr,lbl,clridx)) in enumerate([("lcsvd_precon","_sp","PCB (α∈[0.001,0.01])",2),
-                                            ("compnmf","_nn","Compressed NMF",5),
-                                            ("hals","_sp_nn","HALS (α∈[0,0.5])",3)])
-    # eval(print("$(frpx)_means"))
-    frpx = "$(mtdstr)$(submtdstr)"
-    ln1 = lines!(ax11_1, rng[plotrng], eval(Symbol("$(frpx)1_means"))[plotrng], color=mtdcolors[clridx], label=lbl)
-    bnd1 = band!(ax11_1, rng[plotrng], eval(Symbol("$(frpx)1_lower"))[plotrng], eval(Symbol("$(frpx)1_upper"))[plotrng], color=mtdcoloras[clridx])
-    ln2 = lines!(ax11_2, rng[plotrng], eval(Symbol("$(frpx)2_means"))[plotrng], color=mtdcolors[clridx], label=lbl, linestyle = :dash, linewidth = 2)
-    bnd2 = band!(ax11_2, rng[plotrng], eval(Symbol("$(frpx)2_lower"))[plotrng], eval(Symbol("$(frpx)2_upper"))[plotrng], color=mtdcoloras[clridx])
-    push!(ln1s,ln1); push!(ln2s,ln2); push!(lbls,lbl)
-end
-
-fig[1,2] = Legend(fig,[ln1s,ln2s],[lbls,lbls],["Fit", "Sparsity |W|"],labelsize=fontsize)
-# axislegend(ax1, position = :rt) # halign = :left, valign = :top
-# axislegend(ax2, position = :rb) # halign = :left, valign = :top
-save(joinpath(subworkpath,"cbclface_alpha_fits.png"),fig,px_per_unit=2)
-
-
-
-
-
-#=
 #================================= plot fixed alpha ===================#
-z = 0.5
-for prefix in ["lcsvd_precon","compnmf","hals"]
-    ddstr = "dd$(prefix)"; ddsym = Symbol(ddstr)
-#    @eval (($ddsym)=(load("$(prefix)_runtime_vs_avgfits.jld2"))) # this doens't work 'prefix' refer global variable
-    eval(Meta.parse("$(ddstr)=load(joinpath(subworkpath,\"$(prefix)\",\"$(prefix)_cbcl_runtime_vs_fits.jld2\"))"))
+for mtdstr in ["lcsvd","compnmf","hals"]
+    @show mtdstr
+    ddstr = "dd$(mtdstr)"; ddsym = Symbol(ddstr)
+#    @eval (($ddsym)=(load("$(mtdstr)_runtime_vs_avgfits.jld2"))) # this doens't work 'mtdstr' refer global variable
+    eval(Meta.parse("$(ddstr)=load(joinpath(subworkpath,\"$(mtdstr)_cbcl_runtime_vs_fits.jld2\"))"))
     @eval (rng=($(ddsym)["rng"]))
-    submtdstrs = prefix == "lcsvd_precon" ? ["_sp"] : prefix == "compnmf" ? ["_nn"] : ["_sp_nn"]
+    submtdstrs = mtdstr == "lcsvd" ? ["_sp"] : mtdstr == "compnmf" ? ["_nn"] : ["_sp_nn"]
     for submtdstr in submtdstrs
-        frpx = "$(prefix)$(submtdstr)"; dickeystr = "stat$(submtdstr)"
+        @show submtdstr
+        frpx = "$(mtdstr)$(submtdstr)"; dickeystr = "stat$(submtdstr)"
         # @eval ($(Symbol("$(frpx)_means")) = ($(ddsym)["stat$(submtdstr)"][1]))
         # @eval ($(Symbol("$(frpx)_stds")) = ($(ddsym)["stat$(submtdstr)"][2]))
         eval(Meta.parse("$(frpx)1_means=$(ddstr)[\"stat$(submtdstr)1\"][1]"))
@@ -194,14 +109,14 @@ end
 # admm_sp_upper = admm_sp_means + z*admm_sp_stds; admm_sp_lower = admm_sp_means - z*admm_sp_stds
 # admm_sp_nn_upper = admm_sp_nn_means + z*admm_sp_nn_stds; admm_sp_nn_lower = admm_sp_nn_means - z*admm_sp_nn_stds
 
-fig = Figure()
-ax1 = AMakie.Axis(fig[1, 1], xlabel = "time(sec)", ylabel = "fit", title = "Average Fit Value vs. Running Time")
-ax2 = AMakie.Axis(fig[1, 1], yaxisposition = :right, ylabel = "Sparseness of W" #= yticklabelcolor = :red =# )
+fig = Figure(resolution=(600,400)); xlimits = (0,2); limits = (xlimits, nothing)
+ax1 = AMakie.Axis(fig[1, 1], limits=limits, xlabel = "time(sec)", ylabel = "fit", title = "Average Fit Value vs. Running Time")
+ax2 = AMakie.Axis(fig[1, 1], limits=limits, yaxisposition = :right, ylabel = "Sparseness of W" #= yticklabelcolor = :red =# )
 hidespines!(ax2)
 hidexdecorations!(ax2)
 
 lns = Dict(); bnds=Dict()
-for (i,(frpx, lbl)) in enumerate([("lcsvd_precon_sp","LCSVD (α=100)"),("compnmf_nn","Compressed NMF"),("hals_sp_nn","HALS (α=0.1)")])
+for (i,(frpx, lbl)) in enumerate([("lcsvd_sp","SMF (α ∈ [0.0001,0.01])"),("compnmf_nn","Comp. NMF"),("hals_sp_nn","HALS (α ∈ [0,5])")])
     # eval(print("$(frpx)_means"))
     ln1 = lines!(ax1, rng, eval(Symbol("$(frpx)1_means")), color=mtdcolors[i+1], label=lbl)
     bnd1 = band!(ax1, rng, eval(Symbol("$(frpx)1_lower")), eval(Symbol("$(frpx)1_upper")), color=mtdcoloras[i+1])
@@ -212,8 +127,8 @@ for (i,(frpx, lbl)) in enumerate([("lcsvd_precon_sp","LCSVD (α=100)"),("compnmf
 end
 
 axislegend(ax1, position = :rt) # halign = :left, valign = :top
-axislegend(ax2, position = :rb) # halign = :left, valign = :top
-save(joinpath(subworkpath,"cbclface_alpha_fits.png"),fig,px_per_unit=2)
+#axislegend(ax2, position = :rb) # halign = :left, valign = :top
+save(joinpath(subworkpath,"cbclface_fits.png"),fig,px_per_unit=2)
 
 
 # # hals nn
@@ -246,12 +161,6 @@ save(joinpath(subworkpath,"cbclface_alpha_fits.png"),fig,px_per_unit=2)
 # color = (0.7,0.1,0.5)
 # lines!(ax, rng, admm_sp_means, color=RGBA(color...,1), label="Comp. SMF (α=10)")
 # band!(ax, rng, admm_sp_lower, admm_sp_upper, color=RGBA(color...,0.2))
-
-
-
-
-
-
 
 
 
@@ -385,4 +294,3 @@ ys_high = 0.2 .* sin.(xs) .+ 0.25
 band!(xs, ys_low, ys_high)
 band!(xs, ys_low .- 1, ys_high .-1, color = RGBA(0,0,0,0.5))
 
-=#

@@ -153,7 +153,7 @@ ax11_2 = AMakie.Axis(fig[1, 1], limits = ((0,plottime), nothing), yaxisposition 
 hidespines!(ax11_2)
 hidexdecorations!(ax11_2)
 
-plotrng = :
+plotrng = Colon()
 ln1s = OrderedDict(); ln2s = OrderedDict(); bnd1s=OrderedDict(); bnd2s=OrderedDict(); lbls=OrderedDict{String,String}()
 for (i,(mtdstr,submtdstr,lbl)) in enumerate([("sca","_sp","SMF (α∈[1,1000])"),("admm","_nn","Comp. NMF)"),("hals","_sp_nn","HALS (α∈[0,5])")])
     # eval(print("$(frpx)_means"))
