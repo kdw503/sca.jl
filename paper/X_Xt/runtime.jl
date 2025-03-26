@@ -426,6 +426,7 @@ save(joinpath(subworkpath,"MNmD_LBFGS_fxreldiff.png"),f)
 
 # f(x) = (x-1)'A(x-1) test
 using Optim, LineSearches
+subworkpath = joinpath(workpath,"paper","X_Xt")
 
 A = rand(100,100); A = A'A
 
