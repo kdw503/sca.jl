@@ -12,7 +12,7 @@ cd(workpath); Pkg.activate(".")
 subworkpath = joinpath(workpath,"4o3norm")
 
 include(joinpath(workpath,"setup_light.jl"))
-#include(joinpath(workpath,"setup_plot.jl"))
+include(joinpath(workpath,"setup_plot.jl"))
 include(joinpath(workpath,"utils.jl"))
 
 using ForwardDiff
@@ -217,6 +217,18 @@ v = rand(100000)
 @btime smW4o3 = norm(state.W,4/3)^(3/4) # 239.027 μs (2 allocations: 32 bytes)
 @btime smW4o3^(3/4) # 42.184 ns (1 allocation: 16 bytes)
 
+function cal4o3power(x)
+    cbrt(x^2)^2
+end
+
+v = rand(800*15)
+@btime v.^2 # 5.700 μs (9 allocations: 94.02 KiB)
+@btime v.^4 # 38.800 μs (9 allocations: 94.02 KiB)
+@btime abs.(v).^(4/3)   # 140.100 μs (4 allocations: 93.84 KiB)
+@btime cbrt.(v.^4)      # 87.100 μs (10 allocations: 94.05 KiB)
+@btime cal4o3power.(v)  # 51.400 μs (3 allocations: 93.81 KiB)
+@btime cbrt.(v.^2).^2   # 53.100 μs (18 allocations: 94.33 KiB)
+
 function norm4o3_test!(x)
     sum = 0.
     @inbounds @simd for i in eachindex(x)
@@ -236,14 +248,10 @@ fig = Figure()
 ax = AMakie.Axis(fig[1, 1], xlabel = "x", ylabel = "∥x∥ₗᵖ", title = "",
         xminorgridvisible=true,xminorticks = IntervalsBetween(10),xminorticksvisible=true)
 
-lns = Dict()
-ln = lines!(ax, xrng, y1s, color=mtdcolors[2], label="l=1")
-lns["l=1"] = ln
-ln = lines!(ax, xrng, y4o3s, color=mtdcolors[3], label="l=4/3")
-lns["l=4/3"] = ln
-ln = lines!(ax, xrng, y2s, color=mtdcolors[5], label="l=2")
-lns["l=2"] = ln
+ln = lines!(ax, xrng, y1s, color=mtdcolors[2], label="l=p=1")
+ln = lines!(ax, xrng, y4o3s, color=mtdcolors[3], label="l=p=4/3")
+ln = lines!(ax, xrng, y2s, color=mtdcolors[5], label="l=p=2")
 
 axislegend(ax, position = :ct) # halign = :left, valign = :top
-save(joinpath(".","4o3norm","4o3norm2.png"),fig,px_per_unit=2)
+save(joinpath(subworkpath,"4o3norm.png"),fig,px_per_unit=2)
 

@@ -44,6 +44,7 @@ Manifest.toml
 *.bin
 *.cfg
 *.jpg
+*.pdf
 *workspace
 Thumbs.db
 paper/compnmf/Lib
