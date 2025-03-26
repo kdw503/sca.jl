@@ -3,9 +3,9 @@
 # smjuliajob -R "$resource" $MYSTORAGE/work/julia/sca/expr1
 # julia         file             dir_name methods initmethod iterstrt iterstop SNR factor ncells lcsvd_maxiter hals_maxiter hals_α compnmf_maxiter
 export jlexec=/usr/local/julia/bin/julia
-export jlfile=$MYSTORAGE/work/julia/sca/paper/runtime_sgd.jl
-lscpu >> $MYSTORAGE/work/julia/sca/paper/SNR/machine.txt
-$jlexec $jlfile \"SGD\" [:lbfgs,:slbfgs,:sgd] 12 30 10 1 15 0 30
+export jlfile=$MYSTORAGE/work/julia/sca/paper/runtime_all.jl
+#lscpu >> $MYSTORAGE/work/julia/sca/paper/SNR/machine.txt
+$jlexec $jlfile \"size_fast\" [\"pcb\",\"pcb_precon\",\"hals\",\"compnmf\"] 21 30 0 10 15 150 80 0.1 900
 
 # export jlfile=$MYSTORAGE/work/julia/sca/paper/runtime_all.jl
 # lscpu >> $MYSTORAGE/work/julia/sca/paper/SNR/machine.txt

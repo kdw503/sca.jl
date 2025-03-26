@@ -8,20 +8,20 @@ elseif Sys.isunix()
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
 cd(workpath); Pkg.activate(".")
-subworkpath = joinpath(workpath,"paper","ncells")
+subworkpath = joinpath(workpath,"paper","size_fast")
 
 include(joinpath(workpath,"setup_light.jl"))
 include(joinpath(workpath,"setup_plot.jl"))
 using Interpolations
 
-SNR = 0; num_experiments = 50; ncellss=[10,20,50]; factor=1
+SNR = 0; num_experiments = 50; factors=[1,5,10]; ncells=15
 itp_time_resol = 1000
 for (prefix, initmethods, tailstrs) in [("pcb", ["isvd","isvd"], ["_sp","_sp_nn"]),
                 # ("pcb_LPF", ["isvd","isvd", "nndsvd"], ["_sp","_sp_nn", "_nn"]),
                 ("pcb_precon", ["isvd","isvd"], ["_sp","_sp_nn"]),
                 # ("pcb_precon_LPF", ["isvd","isvd", "nndsvd"], ["_sp","_sp_nn", "_nn"]),
                 ("hals",["nndsvd","nndsvd"],["_nn","_sp_nn"]),("compnmf",["lowrank_nndsvd"],["_nn"])]
-    for ncells = ncellss
+    for factor = factors
         rt2_min = Inf
         for (initmethod,tailstr) in zip(initmethods,tailstrs)
             fprex="$(prefix)$(SNR)db$(factor)f$(ncells)s$(initmethod)"
@@ -64,7 +64,7 @@ end
 
 tmppath = ""
 z = 0.5; ylimits=(0.48,1.01); resol=(800,600); fntsize1 = 30; fntsize2 = 30
-for (idx,ncells) = enumerate(ncellss)
+for (idx,factor) = enumerate(factors)
 plottime = Inf
 for (mtdstr, submtdstrs) in [("pcb",["_sp", "_sp_nn"]),
                             #("pcb_LPF",["_sp", "_sp_nn", "_nn"]),
@@ -151,7 +151,7 @@ plotrng = Colon()
 
 # compare PCB with other methods
 fig = Figure(size=resol)
-maxplottimes = [0.1,0.3,1.5]
+maxplottimes = [0.3,2.0,3.0]
 ax = AMakie.Axis(fig[1, 1], limits = ((0,maxplottimes[idx]#=min(maxplottimes[idx],plottime)=#), ylimits),
                 xlabel = "time(sec)", ylabel = "average fit", xlabelsize=fntsize2, ylabelsize=fntsize2,
                 xticklabelsize=fntsize2, yticklabelsize=fntsize2)#, title = "Average Fit Value vs. Running Time")
@@ -177,7 +177,7 @@ end
 axislegend(ax, labelsize=fntsize1, position = :rb) # halign = :left, valign = :top
 save(joinpath(subworkpath,"avgfits$(SNR)db$(factor)f$(ncells)s_all.png"),fig,px_per_unit=2)
 
-end # for ncells
+end # for factors
 
 
 
@@ -269,9 +269,11 @@ end
 alpha = 0.2; cls = distinguishable_colors(10); clbs = convert.(RGBA,cls,alpha)
 
 plotrng = Colon()
-fig = Figure(size=(400,300))
+fig = Figure(size=(800,600))
 maxplottimes = [0.09]
-ax = AMakie.Axis(fig[1, 1], limits = ((0,min(maxplottimes[idx],plottime)), nothing), xlabel = "time(sec)", ylabel = "average fit")#, title = "Average Fit Value vs. Running Time")
+ax = AMakie.Axis(fig[1, 1], limits = ((0,maxplottimes[idx]#=min(maxplottimes[idx],plottime)=#), ylimits),
+                xlabel = "time(sec)", ylabel = "average fit", xlabelsize=fntsize2, ylabelsize=fntsize2,
+                xticklabelsize=fntsize2, yticklabelsize=fntsize2)#, title = "Average Fit Value vs. Running Time")
 lns = Dict(); bnds=Dict()
 # for (i,(frpx, lbl)) in enumerate([("sca_sp","PCB (α=100,β=0)"),("hals_nn","HALS (α=0)"),("hals_sp_nn","HALS (α=0.1)"),
 #                                  ("admm_nn","Comp. NMF (α=0)"),("admm_sp","Comp. PCB (α=10)"),
@@ -286,7 +288,7 @@ for (i,(mtdstr, submtdstr, lbl, clridx)) in enumerate([("pcb","_sp","PCB NNDSVD 
     lns["$(frpx)_line"] = ln; bnds["$(frpx)_band"] = bnd;
 end
 
-axislegend(ax, position = :rb) # halign = :left, valign = :top
+axislegend(ax, labelsize=30, position = :rb) # halign = :left, valign = :top
 save(joinpath(subworkpath,"avgfits$(SNR)db$(ncells)s_compare_initmethod.png"),fig,px_per_unit=2)
 
 end # for factor

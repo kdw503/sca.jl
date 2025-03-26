@@ -15,10 +15,10 @@ include(joinpath(workpath,"setup_light.jl"))
 # powershell prompt> julia C:\Users\kdw76\WUSTL\Work\julia\sca\paper\runtime_all.jl '\"SNR\"' '[\"pcb_precon\",\"hals\",\"compnmf\"]'  50 -10 1 15 150 120 0.1 800
 # in batchfile> julia C:\Users\kdw76\WUSTL\Work\julia\sca\paper\runtime_all.jl \"SNR\" [\"pcb_precon\",\"hals\",\"compnmf\"] 50 -10 1 15 150 120 0.1 800
 # to run the batch file in powershell> Start-Process -FilePath "C:\Users\kdw76\WUSTL\work\julia\sca\expr.bat -Wait
-# in julia REPL> ARGS = ["\"SNR\"","[\"pcb\",\"hals\",\"compnmf\"]", "1", "2","0","1","15","150","120","0.1","800"]
+# in julia REPL> ARGS = ["\"SNRwPP\"","[\"pcb\",\"hals\",\"compnmf\"]", "1", "2","0","1","15","150","120","0.1","800"]
 # in julia REPL> ARGS = ["\"tsvd_test\"","[\"pcb_tsvd\"]", "1", "2","0","1","15","150","120","0.1","800"]
 subdir = eval(Meta.parse(ARGS[1]))
-@show subdir; flush(stdout) 
+@show subdir; flush(stdout)
 subworkpath = joinpath(workpath,"paper",subdir)
 methods=eval(Meta.parse(ARGS[2]));
 num_experistrt = eval(Meta.parse(ARGS[3]));
@@ -49,7 +49,7 @@ compnmf_maxiter = eval(Meta.parse(ARGS[11]));
 # end
 
 dataset = :fakecells; inhibitindices=0; bias=0.1
-lpfilter = dataset ∈ [:neurofinder] ? :meanT : :none; filterstr = "_$(lpfilter)"
+lpfilter = :meanST; filterstr = "_$(lpfilter)"
 datastr = dataset == :fakecells ? "_fc$(inhibitindices)_$(SNR)dB" : "_$(dataset)"
 subtract_bg=false; maskth=0.25; makepositive = true; tol=-1
 imgsz0 = (40,20)
@@ -65,7 +65,15 @@ X, imsz, lhT, ncs, gtnoc, datadic = load_data(dataset; sigma=sigma, imgsz=imgsz,
 
 (m,n,p) = (size(X)...,noc)
 gtW, gtH = dataset == :fakecells ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
-X = LCSVD.noisefilter(lpfilter,X,imgsz)
+if lpfilter == :meanST
+    X = LCSVD.noisefilter(:meanS,X,imgsz)
+    X = LCSVD.noisefilter(:meanT,X,imgsz)
+else
+    X = LCSVD.noisefilter(lpfilter,X,imgsz)
+end
+# maxindices = argmax.(eachcol(gtH))
+# maxSNR_X = X[:,[maxindices...]]
+# TestData.imsaveW(joinpath(subworkpath,"X_SNR$(SNR)_LPF_maxSNR_W.png"), maxSNR_X, imgsz, borderwidth=1,colors=TestData.bbw())
 
 if subtract_bg
     rt1cd = @elapsed Wcd, Hcd = NMF.nndsvd(X, 1, variant=:ar) # rank 1 NMF
@@ -86,7 +94,7 @@ if prefix in ["pcb_precon","pcb_precon_LPF","pcb","pcb_LPF","pcb_precon_tsvd","p
     r=0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
         # if this is too big iteration number would be increased
 #    try
-    for (tailstr,α,β) in [("_sp_nn",0.005,5.0), ("_sp",0.005,0.)]# ,("_nn",0.,5.0)
+    for (tailstr,α,β) in [("_sp_nn",0.005,5.0), ("_sp",0.005,0.)]#,("_nn",0.,5.0)
         initmethod = tailstr == "_nn" ? :nndsvd : prefix ∈ ["pcb_tsvd","pcb_precon_tsvd"] ? :tsvd : :isvd
         dd = Dict()
         β1 = β2= β; α1 = α2 = α

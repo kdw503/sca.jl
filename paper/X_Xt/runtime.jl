@@ -428,7 +428,6 @@ save(joinpath(subworkpath,"MNmD_LBFGS_fxreldiff.png"),f)
 using Optim, LineSearches
 
 A = rand(100,100); A = A'A
-x1 = 2ones(100); x2 = x1 + 10*(rand(100).-0.5)*eps(Float64)
 
 function prepare_fg(A,x0)
     os = ones(length(x0))
@@ -446,7 +445,7 @@ function prepare_fg(A,x0)
     fg!, nothing
 end
 
-function minimize(A, x0; tol=-1e-7, maxiter = 1000)
+function minimize(A, x0; optim_mtd=:LBFGS, tol=-1e-7, maxiter = 1000)
     options = Optim.Options(x_abstol=-1, x_reltol=tol, f_abstol=-1,
                 f_reltol=tol, g_abstol=-1, iterations=maxiter,
                 store_trace=true, show_trace=false, extended_trace=true,
@@ -456,8 +455,8 @@ function minimize(A, x0; tol=-1e-7, maxiter = 1000)
     linesearch = LineSearches.MoreThuente()
     fgh!, P = prepare_fg(A, x0)
     result = optimize(Optim.only_fg!(fgh!),x0,
-                LBFGS(m=10, alphaguess=alphaguess,linesearch=linesearch, P=nothing),
-                #ConjugateGradient(alphaguess=alphaguess,linesearch=linesearch, P=nothing),
+                optim_mtd == :LBFGS ? LBFGS(m=10, alphaguess=alphaguess,linesearch=linesearch, P=nothing) :
+                             ConjugateGradient(alphaguess=alphaguess,linesearch=linesearch, P=nothing),
                 options)
     xsol = Optim.minimizer(result)
     Eval = result.minimum
@@ -466,51 +465,83 @@ function minimize(A, x0; tol=-1e-7, maxiter = 1000)
     xsol, Eval, xs, fxs
 end
 
-xsol1, Eval1, xs1, fxs1 = minimize(A, x1)
-xsol2, Eval2, xs2, fxs2 = minimize(A, x2)
+x1 = 2ones(100)
+x2 = x1 + 10*(rand(100).-0.5)*eps(Float64)
+x3 = x1 + (rand(100).-0.5)*1e-2
 
-fdiffs = Float64[]; freldiffs = Float64[]; xdiffs = Float64[]; xreldiffs = Float64[]
+maxiter = 100000; optim_mtd = :LBFGS; tol=-1e-9
+xsol1, Eval1, xs1, fxs1 = minimize(A, x1; optim_mtd = optim_mtd, tol = tol, maxiter = maxiter)
+xsol2, Eval2, xs2, fxs2 = minimize(A, x2; optim_mtd = optim_mtd, tol = tol, maxiter = maxiter)
+xsol3, Eval3, xs3, fxs3 = minimize(A, x3; optim_mtd = optim_mtd, tol = tol, maxiter = maxiter)
+
+f12diffs = Float64[]; f12reldiffs = Float64[]; x12diffs = Float64[]; x12reldiffs = Float64[]
 for (x1, x2) in zip(xs1,xs2)
-    push!(xdiffs, norm(x1-x2))
-    push!(xreldiffs, norm(x1-x2)/norm(x1+x2))
+    push!(x12diffs, norm(x1-x2))
+    push!(x12reldiffs, norm(x1-x2)/norm(x1+x2))
 end
 for (fx1, fx2) in zip(fxs1, fxs2)
-    push!(fdiffs, abs(fx1-fx2))
-    push!(freldiffs, abs(fx1-fx2)/abs(fx1+fx2))
+    push!(f12diffs, abs(fx1-fx2))
+    push!(f12reldiffs, abs(fx1-fx2)/abs(fx1+fx2))
+end
+f13diffs = Float64[]; f13reldiffs = Float64[]; x13diffs = Float64[]; x13reldiffs = Float64[]
+for (x1, x3) in zip(xs1,xs3)
+    push!(x13diffs, norm(x1-x3))
+    push!(x13reldiffs, norm(x1-x3)/norm(x1+x3))
+end
+for (fx1, fx3) in zip(fxs1, fxs3)
+    push!(f13diffs, abs(fx1-fx3))
+    push!(f13reldiffs, abs(fx1-fx3)/abs(fx1+fx3))
 end
 
 f = Figure(size=(350,250))
-ax = AMakie.Axis(f[1,1],limits=(nothing,nothing), yscale=log10)
-lines!(ax,xdiffs,label="norm(x1-x2)")
+ax = AMakie.Axis(f[1,1],limits=(nothing,(nothing)), yscale=log10)
+lines!(ax,x12diffs,label="norm(x1-x2)")
+lines!(ax,x13diffs,label="norm(x1-x3)")
 axislegend(ax; position = :rb)
-save(joinpath(subworkpath,"xtAx_LBFGS_xdiff.png"),f)
+save(joinpath(subworkpath,"xtAx_$(optim_mtd)_xdiff_$(tol)_$(maxiter).png"),f)
 
 f = Figure(size=(350,250))
 ax = AMakie.Axis(f[1,1],limits=(nothing,nothing), yscale=log10)
-lines!(ax,xreldiffs,label="norm(x1-x2)/norm(x1+x2)")
+lines!(ax,x12reldiffs,label="norm(x1-x2)/norm(x1+x2)")
+lines!(ax,x13reldiffs,label="norm(x1-x3)/norm(x1+x3)")
 axislegend(ax; position = :rb)
-save(joinpath(subworkpath,"xtAx_LBFGS_xreldiff.png"),f)
+save(joinpath(subworkpath,"xtAx_$(optim_mtd)_xreldiff_$(tol)_$(maxiter).png"),f)
 
 f = Figure(size=(350,250))
 ax = AMakie.Axis(f[1,1],limits=(nothing,nothing), yscale=identity)
-lines!(ax,fdiffs,label="abs(fx1-fx2)")
-text!( (length(freldiffs),0),
-    text = "$(round(fdiffs[end],sigdigits=2))",
+lines!(ax,f12diffs,label="abs(fx1-fx2)")
+lines!(ax,f13diffs,label="abs(fx1-fx3)")
+text!( (length(f12reldiffs),0),
+    text = "$(round(f12diffs[end],sigdigits=2))",
     rotation = 0,
     align = (:right, :bottom),
     color = :black
 )
 axislegend(ax; position = :rt)
-save(joinpath(subworkpath,"xtAx_LBFGS_fxdiff.png"),f)
+save(joinpath(subworkpath,"xtAx_$(optim_mtd)_fxdiff_$(tol)_$(maxiter).png"),f)
 
-f = Figure(size=(350,250))
-ax = AMakie.Axis(f[1,1],limits=(nothing,nothing), yscale=identity)
-lines!(ax,freldiffs,label="abs(fx1-fx2)/abs(fx1+fx2)")
-text!( (length(freldiffs),0),
-    text = "$(round(freldiffs[end],sigdigits=2))",
+f = Figure(size=(350,250)); ylimits = (1e-24,1e-20)
+ax = AMakie.Axis(f[1,1],limits=(nothing,ylimits), yscale=log10)
+lines!(ax,f12diffs,label="abs(fx1-fx2)")
+lines!(ax,f13diffs,label="abs(fx1-fx3)")
+text!( (length(f12reldiffs),ylimits[1]),
+    text = "$(round(f12diffs[end],sigdigits=2))",
     rotation = 0,
     align = (:right, :bottom),
     color = :black
 )
 axislegend(ax; position = :rt)
-save(joinpath(subworkpath,"xtAx_LBFGS_fxreldiff.png"),f)
+save(joinpath(subworkpath,"xtAx_$(optim_mtd)_fxdiff_log10_$(tol)_$(maxiter).png"),f)
+
+f = Figure(size=(350,250))
+ax = AMakie.Axis(f[1,1],limits=(nothing,nothing), yscale=identity)
+lines!(ax,f12reldiffs,label="abs(fx1-fx2)/abs(fx1+fx2)")
+lines!(ax,f13reldiffs,label="abs(fx1-fx3)/abs(fx1+fx3)")
+text!( (length(f12reldiffs),0),
+    text = "$(round(f12reldiffs[end],sigdigits=2))",
+    rotation = 0,
+    align = (:right, :bottom),
+    color = :black
+)
+axislegend(ax; position = :rt)
+save(joinpath(subworkpath,"xtAx_$(optim_mtd)_fxreldiff_$(tol)_$(maxiter).png"),f)

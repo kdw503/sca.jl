@@ -48,30 +48,32 @@ prefix = "pcb"
 noc = ncs; nac = 0
 (tailstr,initmethod,α,β) = ("_sp_nn",:isvd,0.005,5.0)# ("_nn",:nndsvd,0.,5.0), ("_sp_nn",:isvd,0.005,0.005)
 
-rt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(X, noc, nac; initmethod=initmethod, svdmethod=:isvd)
-Xt = copy(X'); W0t = copy(W0'); H0t = copy(H0'); M0t = copy(M0'); N0t = copy(N0'); gtWt = copy(gtH); gtHt = copy(gtW)
+rt1 = @elapsed U, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(X, noc, nac; initmethod=initmethod, svdmethod=:isvd)
+V = copy(H0'); N0t = copy(N0')
 
 β1 = β2= β; α1 = α2 = α
 β1vec = fill(β1,noc); β2vec = fill(β2,noc); β1vec[1] = 0.; β2vec[1] = 0.
 α1vec = fill(α1,noc); α2vec = fill(α2,noc); α1vec[1] = 0.; α2vec[1] = 0.
-σ0=std(W0*M0); r=0.3 # std(N0*H0t) #=10*std(W0)=#
-useprecond=false; uselv=false; tol=1e-6
-maxiter = 100#Int(ceil(log(eps(eltype(X)))/log(r))) #lcsvd_maxiter # 
+r=0.3; useprecond=false; uselv=false; tol=1e-6
+maxiter = Int(ceil(log(eps(eltype(X)))/log(r))) #lcsvd_maxiter # 
 inner_tol = 1e-6; inner_maxiter = 1000#Int(ceil(2.5*ncs+350))# Int(ceil(0.75*ncs+100)) # 
 alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2,
     #α1vec=α1vec, α2vec=α2vec, β1vec=β1vec, β2vec=β2vec,
-    σ0=σ0, r=r, useprecond=false, usedenoiseW0H0=false,
-    denoisefilter=:avg, uselv=false, imgsz=imgsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
-    store_inner_trace = true, show_trace = true, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
+    r=r, useprecond=useprecond, usedenoiseW0H0=false,
+    denoisefilter=:avg, uselv=false, imgsz=imgsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = false,
+    store_inner_trace = false, show_trace = true, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
     f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0);
 M1, N1t = copy(M0), copy(N0t)
-rst1 = LCSVD.solve!(alg, X, W0, H0t, D, M1, N1t);
+rst1 = LCSVD.solve!(alg, X, U, V, D, M1, N1t; gtW=gtW, gtH=gtH);
 alg.show_trace = false; alg.store_trace = false; alg.store_inner_trace = false
 M1, N1t = copy(M0), copy(N0t)
-rt2 = @elapsed LCSVD.solve!(alg, X, W0, H0t, D, M1, N1t);
-# rt2 = @elapsed LCSVD.solve!(alg, X, W0, H0t, D, M1, N1t; gtW = gtW, gtH = gtH);
-# @profview LCSVD.solve!(alg, X, W0, H0t, D, M1, N1t);
-# M1, N1t = copy(M0), copy(N0t); @btime LCSVD.solve!(alg, X, W0, H0t, D, $M1, $N1t);
+rt2 = @elapsed LCSVD.solve!(alg, X, U, V, D, M1, N1t);
+alg.α1=α1; alg.α2=α2; alg.β1=0.; alg.β2=0.; alg.useprecond=true
+M1, N1t = copy(M0), copy(N0t)
+rt3 = @elapsed LCSVD.solve!(alg, X, U, V, D, M1, N1t);
+# rt2 = @elapsed LCSVD.solve!(alg, X, U, V, D, M1, N1t; gtW = gtW, gtH = gtH);
+# @profview LCSVD.solve!(alg, X, U, V, D, M1, N1t);
+# M1, N1t = copy(M0), copy(N0t); @btime LCSVD.solve!(alg, X, U, V, D, $M1, $N1t);
 # before : 35.218 ms (11620 allocations: 87.70 MiB)
 # change W0TW to WTW0 : 33.343 ms (10694 allocations: 78.98 MiB)
 # using view : 22.194 ms (8228 allocations: 3.82 MiB)
@@ -79,15 +81,27 @@ rt2 = @elapsed LCSVD.solve!(alg, X, W0, H0t, D, M1, N1t);
 # after order=2 for sca2 : 16.357 ms (8221 allocations: 3.81 MiB)
 # after reimplement sca2 : 15.802 ms (8316 allocations: 3.83 MiB)
 # after remove duplicated calculations : 15.754 ms (8312 allocations: 3.68 MiB)
-# after type inference fix and x0 = vcat(.,.) : 15.471 ms (8138 allocations: 3.63 MiB)
+# after type inference fix and x0 = vcat(.,.) : 15.471 ms (8138 allocations: 3.63 MiB), 19.165 ms (8887 allocations: 6.36 MiB on RIS)
+
+# RIS
+# before : 84.885 ms (26194 allocations: 165.73 MiB)
+# after remove duplicated calculations : 53.557 ms (28634 allocations: 25.85 MiB)
+# after type inference fix and x0 = vcat(.,.) : 49.897 ms (26279 allocations: 24.92 MiB)
+# precond (sp_nn)
+# before : 109.364 ms (29594 allocations: 195.16 MiB)
+# after remove duplicated calculations : 61.398 ms (28842 allocations: 20.43 MiB)
+# after type inference fix and x0 = vcat(.,.) : 47.481 ms (20713 allocations: 14.71 MiB)
+# precond(sp)
+# before : 85.872 ms (42152 allocations: 198.67 MiB)
+# after remove duplicated calculations : 54.275 ms (33078 allocations: 33.97 MiB)
+# after type inference fix and x0 = vcat(.,.) : 52.369 ms (31405 allocations: 34.81 MiB)
 
 
 W1, H1 = rst1.W, rst1.Ht'
 LCSVD.normalizeW!(W1,H1);
 # avgnssda, ml, nssdas = LCSVD.matchedWnssda(gtW, W); fitval = LCSVD.fitd(X,W*H)
-avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W1, H1; clamp=false)
-fitval = LCSVD.fitd(X,W1*H1)
-fv = dataset == :fakecells ? avgfit : fitval
+dataset == :fakecells && (fv, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W1, H1; clamp=false))
+dataset != :fakecells && (fv = LCSVD.fitd(X,W1*H1))
 nodr = LCSVD.matchedorder(ml,noc); Wlc1, Hlc1 = W1[:,nodr], H1[nodr,:]; # W3,H3 = sortWHslices(W1,H1)
 LCSVD.flip2makepos!(Wlc1,Hlc1)
 fprex = "$(prefix)$(SNR)db_ft$(factor)_nc$(noc)_$(initmethod)"
@@ -222,3 +236,36 @@ A = rand(800,1000) .- 0.5
 @btime sca2_new($A) # 75.000 μs (0 allocations: 0 bytes) ----> best
 @btime sca2_new2($A) # 384.000 μs (0 allocations: 0 bytes)
 @btime sca2_new3($A) # 77.000 μs (0 allocations: 0 bytes)
+
+#========= Compare before and after =================#
+subworkpath = joinpath(workpath,"speedup")
+subworkpath_b4 = joinpath(workpath,"paper","ncells")
+subworkpath_after = joinpath(workpath,"paper","ncells_fast")
+
+z = 0.5
+ddpcbb4=load(joinpath(subworkpath_b4,"pcb","pcb0db1f10s_runtime_vs_avgfits.jld2"))
+pcbb4rng = ddpcbb4["rng"]
+pcbb4_sp_nn_means = ddpcbb4["stat_sp_nn"][1]
+pcbb4_sp_nn_stds = ddpcbb4["stat_sp_nn"][2]
+pcbb4_sp_nn_upper = pcbb4_sp_nn_means+z*pcbb4_sp_nn_stds
+pcbb4_sp_nn_lower = pcbb4_sp_nn_means-z*pcbb4_sp_nn_stds
+
+ddpcbaft=load(joinpath(subworkpath_after,"pcb","pcb0db1f10s_runtime_vs_avgfits.jld2"))
+pcbaftrng = ddpcbaft["rng"]
+pcbaft_sp_nn_means = ddpcbaft["stat_sp_nn"][1]
+pcbaft_sp_nn_stds = ddpcbaft["stat_sp_nn"][2]
+pcbaft_sp_nn_upper = pcbaft_sp_nn_means+z*pcbaft_sp_nn_stds
+pcbaft_sp_nn_lower = pcbaft_sp_nn_means-z*pcbaft_sp_nn_stds
+
+alpha = 0.2; cls = distinguishable_colors(10); clbs = convert.(RGBA,cls,alpha)
+plotrng = Colon()
+# compare PCB with other methods
+fig = Figure(size=(400,300))
+ax = AMakie.Axis(fig[1, 1], limits = ((0,0.2), (0.5,1.0)), xlabel = "time(sec)", ylabel = "average fit")#, title = "Average Fit Value vs. Running Time")
+ln = lines!(ax, pcbb4rng[plotrng], pcbb4_sp_nn_means[plotrng], color=mtdcolors[2], label="before", linestyle=:dash)
+bnd = band!(ax, pcbb4rng[plotrng], pcbb4_sp_nn_lower[plotrng], pcbb4_sp_nn_lower[plotrng], color=mtdcoloras[2])
+ln = lines!(ax, pcbaftrng[plotrng], pcbaft_sp_nn_means[plotrng], color=mtdcolors[4], label="after", linestyle=nothing)
+bnd = band!(ax, pcbaftrng[plotrng], pcbaft_sp_nn_lower[plotrng], pcbaft_sp_nn_lower[plotrng], color=mtdcoloras[4])
+axislegend(ax, labelsize=10, position = :rb) # halign = :left, valign = :top
+save(joinpath(subworkpath,"avgfits0db1f10s_speedup.png"),fig,px_per_unit=2)
+

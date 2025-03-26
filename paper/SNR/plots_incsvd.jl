@@ -92,7 +92,7 @@ alpha = 0.2; cls = distinguishable_colors(10); clbs = convert.(RGBA,cls,alpha)
 plotrng = Colon()
 
 # compare LCSVD
-fig = Figure(resolution=(400,300))
+fig = Figure(size=(400,300))
 maxplottimes = [0.3,0.3,0.3]
 ax = AMakie.Axis(fig[1, 1], limits = ((0,maxplottimes[idx]#=min(maxplottimes[idx],plottime)=#), ylimits), xlabel = "time(sec)", ylabel = "average fit")#, title = "Average Fit Value vs. Running Time")
 lns = Dict(); bnds=Dict()
@@ -207,7 +207,7 @@ end
 alpha = 0.2; cls = distinguishable_colors(10); clbs = convert.(RGBA,cls,alpha)
 
 plotrng = Colon()
-fig = Figure(resolution=(400,300))
+fig = Figure(size=(400,300))
 maxplottimes = [0.09]
 ax = AMakie.Axis(fig[1, 1], limits = ((0,min(maxplottimes[idx],plottime)), nothing), xlabel = "time(sec)", ylabel = "average fit")#, title = "Average Fit Value vs. Running Time")
 lns = Dict(); bnds=Dict()

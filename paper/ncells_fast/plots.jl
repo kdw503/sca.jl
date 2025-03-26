@@ -8,7 +8,7 @@ elseif Sys.isunix()
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
 cd(workpath); Pkg.activate(".")
-subworkpath = joinpath(workpath,"paper","ncells")
+subworkpath = joinpath(workpath,"paper","ncells_fast")
 
 include(joinpath(workpath,"setup_light.jl"))
 include(joinpath(workpath,"setup_plot.jl"))
