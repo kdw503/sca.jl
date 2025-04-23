@@ -237,6 +237,21 @@ A = rand(800,1000) .- 0.5
 @btime sca2_new2($A) # 384.000 μs (0 allocations: 0 bytes)
 @btime sca2_new3($A) # 77.000 μs (0 allocations: 0 bytes)
 
+#========= normalize columns test ===================#
+function normalize_columns!(A)
+    for i in 1:size(A, 2)
+        A[:, i] ./= norm(A[:, i])
+    end
+end
+function normalize!(a)
+    a ./= norm(a)
+end
+
+A = rand(800,1000) .- 0.5
+@btime normalize_columns!($A) # 1.890 ms (2000 allocations: 12.45 MiB)
+@btime $A ./= sqrt.(sum($A .^ 2, dims=1))  # 2.927 ms (3 allocations: 6.11 MiB)
+@btime normalize!(eachcol(A)); # 1.396 ms (4011 allocations: 6.32 MiB)
+
 #========= Compare before and after =================#
 subworkpath = joinpath(workpath,"speedup")
 subworkpath_b4 = joinpath(workpath,"paper","ncells")

@@ -28,11 +28,11 @@ bias = 0.1
 
 @show bias; flush(stdout)
 imgsz = (sqfactor*imgsz0[1],sqfactor*imgsz0[2]); lengthT = factor*1000; sigma = sqfactor*5.0
-X, imgsz, lengthT, ncs, gtncells, datadic = load_data(dataset; dpath=subworkpath, sigma=sigma, imgsz=imgsz,
+X, imgsz, lengthT, ncs, gtnoc, datadic = load_data(dataset; dpath=subworkpath, sigma=sigma, imgsz=imgsz,
         lengthT=lengthT, SNR=SNR, bias=bias, useCalciumT=true, inhibitindices=inhibitindices, issave=true,
         isload=true, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
-ncells = 500 # ncs
-(m,n,p) = (size(X)...,ncells)
+noc = 500 # ncs
+(m,n,p) = (size(X)...,noc)
 gtW, gtH = dataset == :fakecells ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
 gtfname = "fakecells$(inhibitindices)_calcium_sz$(imgsz)_lengthT$(lengthT)_SNR$(SNR)_bias$(bias)"
 imsave_data(dataset,joinpath(subworkpath,gtfname),gtW,gtH',imgsz,100; saveH=false)
@@ -51,45 +51,82 @@ if subtract_bg
     X .-= bg
 end
 
+#================= plot linesearch ===========#
+prefix="pcb"
+
+noc=15; initmethod=:isvd; svdmethod=:isvd
+rt1 = @elapsed U, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(X, noc, 0; initmethod=initmethod, svdmethod=svdmethod)
+V = copy(H0'); N0t = copy(N0')
+
+useprecond=false; uselv=false; tol=1e-5; plot_fig = false; fsrdiff_conv = true; fsrdiff_tol = 1e7
+r=0.3 #0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
+    # if this is too big iteration number would be increased
+maxiter = Int(ceil(log(eps(eltype(X)))/log(r)/2)) #lcsvd_maxiter
+usedenoiseW0H0 = false; inner_maxiter=5; makepositive = true
+(tailstr,initmethod,α,β) = ("_sp",:isvd,0.005, 5.0)# ("_nn",:nndsvd,0.,5.0), ("_sp_nn",:isvd,0.005,0.005)
+β1 = β2= β; α1 = α2 = α
+inner_tol = 1e-6; inner_maxiter = 1000# Int(ceil(0.75*noc+100))
+alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, r=r, useprecond=false, uselv=false, imgsz=imgsz,
+    maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true, fsrdiff_convergence = fsrdiff_conv,
+    store_inner_trace = false, show_trace = false, allow_f_increases = true, plot_figure = plot_fig, f_abstol=tol, f_reltol=tol,
+    f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, fsrdiff_tol = fsrdiff_tol, successive_f_converge=0)
+M1, N1t = copy(M0), copy(N0t)
+rt2 = @elapsed rst0 = LCSVD.solve!(alg, X, U, V, D, M1, N1t);
+W1, H1 = rst0.W, rst0.Ht'
+LCSVD.normalizeW!(W1,H1);
+# avgnssda, ml, nssdas = LCSVD.matchedWnssda(gtW, W); fitval = LCSVD.fitd(X,W*H)
+avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W1, H1; clamp=false)
+fitval = LCSVD.fitd(X,W1*H1)
+fv = dataset == :fakecells ? avgfit : fitval
+nodr = LCSVD.matchedorder(ml,noc); Wlc1, Hlc1 = W1[:,nodr], H1[nodr,:]; # W3,H3 = sortWHslices(W1,H1)
+LCSVD.flip2makepos!(Wlc1,Hlc1)
+fprex = "$(prefix)$(SNR)db_ft$(factor)_nc$(noc)_$(initmethod)"
+regstr = alg.usecolparams ? "_avec($(α1vec[1]),$(α1vec[2]))_bvec($(β1vec[1]),$(β1vec[2]))" : "_a$(α)_b$(β)"
+fname = alg.fsrdiff_convergence ? joinpath(subworkpath,"$(fprex)$(regstr)_tol$(tol)_miter$(maxiter)_fsrtol$(fsrdiff_tol)_f$(fv)_tit$(rst0.totalniters)_rt$(rt2)") :
+                            joinpath(subworkpath,"$(fprex)$(regstr)_tol$(tol)_miter$(maxiter)_f$(fv)_tit$(rst0.totalniters)_rt$(rt2)")
+imsave_data(dataset,fname,Wlc1,Hlc1,imgsz,100; saveH=false)
+println("avgfit = $(round(avgfit,sigdigits=4)), runtime = $(round(rt2,sigdigits=4))sec, total iter = $(rst0.totalniters)")
+
+#=================================================#
 first_inner_iters = Int[]; total_inner_iters = Int[]; inner_iters=[]
-for ncells in 20:20:500
-    @show ncells
+for noc in 20:20:500
+    @show noc
     # LCSVD
     prefix = "lcsvd"
     @show prefix; flush(stdout)
 
-    mfmethod = :LCSVD; useprecond=false; uselv=false; tol=1e-5
+    mfmethod = :PCB; useprecond=false; uselv=false; tol=1e-5
     r=0.3 #0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
         # if this is too big iteration number would be increased
-    maxiter = 150#Int(ceil(log(eps(eltype(X)))/log(r))) #lcsvd_maxiter # 
+    maxiter = 150#Int(ceil(log(eps(eltype(X)))/log(r))) #lcsvd_maxiter
 
     usedenoiseW0H0 = false; makepositive = true
 
     (tailstr,initmethod,α,β) = ("_sp",:svd,0.005,.0)# ("_nn",:nndsvd,0.,5.0), ("_sp_nn",:isvd,0.005,0.005)
 
     β1 = β2= β; α1 = α2 = α
-    rt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, ncells, 0; initmethod=initmethod, svdmethod=:isvd)
-    σ0=std(W0*M0) #=10*std(W0)=#
-    inner_tol = 1e-6; inner_maxiter = Int(ceil(2.5*ncells+350))# Int(ceil(0.75*ncells+100)) # 
-    alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, σ0=σ0, r=r, useprecond=false, usedenoiseW0H0=false,
-        denoisefilter=:avg, uselv=false, imgsz=imgsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
-        store_inner_trace = true, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
+    rt1 = @elapsed U, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(X, noc, 0; initmethod=initmethod, svdmethod=:isvd)
+    V = copy(H0'); N0t = copy(N0')
+    inner_tol = 1e-6; inner_maxiter = 1000# Int(ceil(0.75*noc+100))
+    alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, r=r, useprecond=false, uselv=false, imgsz=imgsz,
+        maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
+        store_inner_trace = true, show_trace = true, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
         f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0)
-    M, N = copy(M0), copy(N0)
-    rst0 = LCSVD.solve!(alg, X, W0, H0, D, M, N);
-    alg.store_trace = false; alg.store_inner_trace = false
-    M, N = copy(M0), copy(N0)
-    rt2 = @elapsed LCSVD.solve!(alg, X, W0, H0, D, M, N);
+    M1, N1t = copy(M0), copy(N0t)
+    rst0 = LCSVD.solve!(alg, X, U, V, D, M1, N1t);
+    alg.show_trace = false; alg.store_trace = false; alg.store_inner_trace = false
+    M1, N1t = copy(M0), copy(N0t)
+    rt2 = @elapsed LCSVD.solve!(alg, X, U, V, D, M1, N1t);
 
-    W, H = rst0.W, rst0.H
+    W, H = rst0.W, rst0.Ht'
     LCSVD.normalizeW!(W,H);
     # avgnssda, ml, nssdas = LCSVD.matchedWnssda(gtW, W); fitval = LCSVD.fitd(X,W*H)
     avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W, H; clamp=false)
     fitval = LCSVD.fitd(X,W*H)
     fv = dataset == :fakecells ? avgfit : fitval
-    nodr = LCSVD.matchedorder(ml,ncells); Wlc, Hlc = W[:,nodr], H[nodr,:]; # W3,H3 = sortWHslices(W1,H1)
+    nodr = LCSVD.matchedorder(ml,noc); Wlc, Hlc = W[:,nodr], H[nodr,:]; # W3,H3 = sortWHslices(W1,H1)
     makepositive && LCSVD.flip2makepos!(Wlc,Hlc)
-    fprex = "$(prefix)$(SNR)db_ft$(factor)_nc$(ncells)"
+    fprex = "$(prefix)$(SNR)db_ft$(factor)_nc$(noc)"
     fname = joinpath(subworkpath,"$(fprex)_a$(α)_b$(β)_r$(r))_intol$(inner_tol)_inmiter$(inner_maxiter)_tol$(tol)_miter$(maxiter)_f$(fv)_it$(rst0.niters)_rt$(rt2)")
     imsave_data(dataset,fname,Wlc,Hlc,imgsz,100; saveH=false)
     # plotH_data(fname*"_Hinhibit",Hlc[inhibitindices,:]; space=0.,ylabel="",ytickformat="{:.2f}")
@@ -109,47 +146,47 @@ for ncells in 20:20:500
     push!(first_inner_iters,niters[1])
     push!(total_inner_iters,total_inner_iter)
     push!(inner_iters,niters)
-    save(joinpath(subworkpath,"inner_iter$(ncells)_tol$(inner_tol).jld2"),"first_inner_iter",niters[1],"total_inner_iter",total_inner_iter,"inner_iter",niters)
+    save(joinpath(subworkpath,"inner_iter$(noc)_tol$(inner_tol).jld2"),"first_inner_iter",niters[1],"total_inner_iter",total_inner_iter,"inner_iter",niters)
 end
 save(joinpath(subworkpath,"inner_iters500_tol1e-5.jld2"),"first_inner_iters",first_inner_iters,"total_inner_iters",total_inner_iters,"inner_iters",inner_iters)
 
-ncellss = 20:20:500
+nocs = 20:20:500
 f = Figure(size=(350,250))
 ax = AMakie.Axis(f[1,1],limits=(nothing,(0,2000)))
-lines!(ax,ncellss,total_inner_iters,label="total_inner_iters")
-lines!(ax,ncellss,first_inner_iters,label="first_inner_iters")
+lines!(ax,nocs,total_inner_iters,label="total_inner_iters")
+lines!(ax,nocs,first_inner_iters,label="first_inner_iters")
 axislegend(ax; position = :lt)
 
 using LinearRegression
 # total_inner_iters
-lr = linregress(ncellss, total_inner_iters)
+lr = linregress(nocs, total_inner_iters)
 tis = LinearRegression.slope(lr)[1]
 tib = LinearRegression.bias(lr)
 tilr(x) = tis*x+tib
-tiregress = tilr.(collect(ncellss))
-lines!(ax,ncellss,tiregress, linestyle=:dash, linewidth=1)
+tiregress = tilr.(collect(nocs))
+lines!(ax,nocs,tiregress, linestyle=:dash, linewidth=1)
 text!(100, 1000, text = "$(round(tis,digits=4))*x+$(round(tib,digits=4))", align = (:left,:top),fontsize=10)
 # total_inner_iters
-flr = linregress(ncellss, first_inner_iters)
+flr = linregress(nocs, first_inner_iters)
 fis = LinearRegression.slope(flr)[1]
 fib = LinearRegression.bias(flr)
 filr(x) = fis*x+fib
-firegress = filr.(collect(ncellss))
-lines!(ax,ncellss,firegress,linestyle=:dash, linewidth=1)
+firegress = filr.(collect(nocs))
+lines!(ax,nocs,firegress,linestyle=:dash, linewidth=1)
 text!(100, 200, text = "$(round(fis,digits=4))*x+$(round(fib,digits=4))", align = (:left,:top),fontsize=10)
-save(joinpath(subworkpath,"inner_iters_ft$(factor)_nc$(ncells)_r$(r)_intol$(inner_tol).png"),f)
+save(joinpath(subworkpath,"inner_iters_ft$(factor)_nc$(noc)_r$(r)_intol$(inner_tol).png"),f)
 
 dd5 = load(joinpath(subworkpath,"inner_iters500_r0.3_tol1e-5.jld2"))
 dd6 = load(joinpath(subworkpath,"inner_iters720_r0.3_tol1e-6.jld2"))
 avgfits5 = dd5["avgfits"]
 avgfits6 = dd6["avgfits"][1:25]
-ncellss = 20:20:500
+nocs = 20:20:500
 f = Figure(size=(350,250))
 ax = AMakie.Axis(f[1,1],limits=(nothing,(0.96,0.99)))
-lines!(ax,ncellss,avgfits6,label="tol=1e-6")
-lines!(ax,ncellss,avgfits5,label="tol=1e-5")
+lines!(ax,nocs,avgfits6,label="tol=1e-6")
+lines!(ax,nocs,avgfits5,label="tol=1e-5")
 axislegend(ax; position = :lb)
-save(joinpath(subworkpath,"tol_vs_avgfits_ft$(factor)_nc$(ncells)_r$(r).png"),f)
+save(joinpath(subworkpath,"tol_vs_avgfits_ft$(factor)_nc$(noc)_r$(r).png"),f)
 
 for inner_iter = 2:length(rst0.traces)
     xs = rst0.traces[inner_iter].xs
@@ -173,7 +210,7 @@ for inner_iter = 2:length(rst0.traces)
     lines!(ax,frelabsdiffs,label="frelabsdiffs")
     # lines!(ax,ngxs,label="maximum(abs, g)") # maximum(abs, g)
     axislegend(ax; position = :lb)
-    save(joinpath(subworkpath,"xdiffs_ft$(factor)_nc$(ncells)_r$(r)_intol$(inner_tol)_inmiter$(inner_maxiter)_$(inner_iter).png"),f)
+    save(joinpath(subworkpath,"xdiffs_ft$(factor)_nc$(noc)_r$(r)_intol$(inner_tol)_inmiter$(inner_maxiter)_$(inner_iter).png"),f)
 end
 
 # outer iter
@@ -192,26 +229,25 @@ lines!(ax,x_relabsmaxdiffs,label="xrelmaxdiffs")
 lines!(ax,f_x_relabsdiffs,label="frelabsdiffs")
 # lines!(ax,ngxs,label="maximum(abs, g)") # maximum(abs, g)
 axislegend(ax; position = :rt)
-save(joinpath(subworkpath,"xdiffs_ft$(factor)_nc$(ncells)_r$(r)_intol$(inner_tol)_inmiter$(inner_maxiter)_tol$(tol)_miter$(maxiter).png"),f)
+save(joinpath(subworkpath,"xdiffs_ft$(factor)_nc$(noc)_r$(r)_intol$(inner_tol)_inmiter$(inner_maxiter)_tol$(tol)_miter$(maxiter).png"),f)
 
 
-mfmethod = :LCSVD; useprecond=false; uselv=false; tol=1e-5
+mfmethod = :PCB; useprecond=false; uselv=false; tol=1e-5
 r=0.3 #0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
     # if this is too big iteration number would be increased
-maxiter = 150#Int(ceil(log(eps(eltype(X)))/log(r))) #lcsvd_maxiter # 
+maxiter = 150#Int(ceil(log(eps(eltype(X)))/log(r))) #lcsvd_maxiter
 usedenoiseW0H0 = false; makepositive = true
 (tailstr,initmethod,α,β) = ("_sp",:svd,0.005,.0)# ("_nn",:nndsvd,0.,5.0), ("_sp_nn",:isvd,0.005,0.005)
 
 β1 = β2= 5.0; α1 = α2 = 0.005
-rt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, ncells, 0; initmethod=initmethod, svdmethod=:isvd)
-σ0=std(W0*M0) #=10*std(W0)=#
-maxiter = 1; inner_tol = 1e-6; inner_maxiter = 1 #Int(ceil(2.5*ncells+350))# Int(ceil(0.75*ncells+100)) # 
-alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, σ0=σ0, r=r, useprecond=false, usedenoiseW0H0=false,
-    denoisefilter=:avg, uselv=false, imgsz=imgsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
-    store_inner_trace = true, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
-    store_sparsity_nneg=true, f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0)
-M, N = copy(M0), copy(N0)
-rst0 = LCSVD.solve!(alg, X, W0, H0, D, M, N);
+rt1 = @elapsed U, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(X, noc, 0; initmethod=initmethod, svdmethod=:isvd)
+V = copy(H0'); N0t = copy(N0')
+alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, r=r, useprecond=false, uselv=false, imgsz=imgsz,
+        maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
+        store_inner_trace = true, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
+        f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0)
+M1, N1t = copy(M0), copy(N0t)
+rst0 = LCSVD.solve!(alg, X, U, V, D, M1, N1t);
 
 invs = Float64[]; sws = Float64[]; shs = Float64[]; nws = Float64[]; nhs = Float64[]; nhs = Float64[]; pns = Float64[]
 for tr in rst0.traces
@@ -240,15 +276,15 @@ save(joinpath(subworkpath,"penalties.png"),f)
 
 
 β1 = β2= 5.0; α1 = α2 = 0.005
-rt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X', ncells, 0; initmethod=initmethod, svdmethod=:isvd)
-σ0=std(N0*H0) #=10*std(W0)=#
-inner_tol = 1e-6; inner_maxiter = Int(ceil(2.5*ncells+350))# Int(ceil(0.75*ncells+100)) # 
-alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, σ0=σ0, r=r, useprecond=false, usedenoiseW0H0=false,
-    denoisefilter=:avg, uselv=false, imgsz=imgsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
-    store_inner_trace = true, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
-    store_sparsity_nneg=true, f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0)
-M, N = copy(M0), copy(N0)
-rst0 = LCSVD.solve!(alg, X', W0, H0, D, M, N);
+rt1 = @elapsed U, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(X', noc, 0; initmethod=initmethod, svdmethod=:isvd)
+V = copy(H0'); N0t = copy(N0')
+inner_tol = 1e-6; inner_maxiter = Int(ceil(2.5*noc+350))# Int(ceil(0.75*noc+100))
+alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, r=r, useprecond=false, uselv=false, imgsz=imgsz,
+        maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
+        store_inner_trace = true, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
+        f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0)
+M1, N1t = copy(M0), copy(N0t)
+rst0 = LCSVD.solve!(alg, X, U, V, D, M1, N1t);
 
 invs = Float64[]; sws = Float64[]; shs = Float64[]; nws = Float64[]; nhs = Float64[]; nhs = Float64[]; pns = Float64[]
 for tr in rst0.traces
@@ -277,15 +313,15 @@ save(joinpath(subworkpath,"penalties_Xt.png"),f)
 
 
 β1 = β2= 5.0; α1 = α2 = 0.005
-rt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, ncells, 0; initmethod=initmethod, svdmethod=:isvd)
-σ0=std(W0*M0) #=10*std(W0)=#
-inner_tol = 1e-6; inner_maxiter = Int(ceil(2.5*ncells+350))# Int(ceil(0.75*ncells+100)) # 
-alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, σ0=σ0, r=r, useprecond=false, usedenoiseW0H0=false,
-    denoisefilter=:avg, uselv=false, imgsz=imgsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
-    store_inner_trace = true, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
-    store_sparsity_nneg=true, f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0)
-M, N = copy(N0'), copy(M0')
-rst0 = LCSVD.solve!(alg, X', H0', W0', D', M, N);
+rt1 = @elapsed U, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(X, noc, 0; initmethod=initmethod, svdmethod=:isvd)
+V = copy(H0'); N0t = copy(N0')
+inner_tol = 1e-6; inner_maxiter = 1000# Int(ceil(0.75*noc+100))
+alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, r=r, useprecond=false, uselv=false, imgsz=imgsz,
+        maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
+        store_inner_trace = true, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
+        f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0)
+M1, N1t = copy(M0), copy(N0t)
+rst0 = LCSVD.solve!(alg, X, U, V, D, M1, N1t);
 
 invs = Float64[]; sws = Float64[]; shs = Float64[]; nws = Float64[]; nhs = Float64[]; nhs = Float64[]; pns = Float64[]
 for tr in rst0.traces
@@ -311,17 +347,4 @@ lines!(ax,nhs,label="nneg h")
 save(joinpath(subworkpath,"penalties_SVD(X)t_nolegends.png"),f)
 axislegend(ax; position = :rt)
 save(joinpath(subworkpath,"penalties_SVD(X)t.png"),f)
-
-
-for inner_maxiter in 1:1:5
-alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, σ0=σ0, r=r, useprecond=false, usedenoiseW0H0=false,
-    denoisefilter=:avg, uselv=false, imgsz=imgsz, maxiter = maxiter, inner_maxiter =inner_maxiter, store_trace = true,
-    store_inner_trace = true, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
-    store_sparsity_nneg=true, f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0)
-M1, N1 = copy(M0), copy(N0)
-rst1 = LCSVD.solve!(alg, X, W0, H0, D, M1, N1);
-M2, N2 = copy(N0'), copy(M0')
-rst2 = LCSVD.solve!(alg, X', H0', W0', D', M2, N2);
-# @show norm(M1-N2'), norm(N1-M2')
-end
 
