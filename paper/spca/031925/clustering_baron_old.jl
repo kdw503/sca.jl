@@ -15,7 +15,6 @@ include(joinpath(workpath,"setup_plot.jl"))
 include(joinpath(workpath,"utils.jl"))
 
 using NeighborhoodClustering, StatsBase, RCall
-using Clustering
 
 R"""
 library(scRNAseq)
@@ -27,7 +26,7 @@ library(Matrix) # as.matrix
 library(ggplot2)
 """
 
-dataset = "Xin" # Baron, Muraro, Segerstolpe, Xin
+dataset = "Muraro" # Baron, Muraro, Segerstolpe, Xin
 ddorg = load(joinpath(subworkpath, dataset, "Xr_$(dataset).jld2"))
 Xr = ddorg["Xr"]; label = ddorg["label"]; genename = ddorg["genename"]
 
@@ -176,9 +175,13 @@ function plot_qm3(qm, qm_tsvd, qm_sma, qmstd, qmstd_tsvd, qmstd_sma, label; ylab
     map(i->(push!(v, qm[i]);push!(v, qm_tsvd[i]);push!(v, qm_sma[i])), 1:length(qm))
 #    map(i->(push!(lerrs, -qmstd[i]);push!(lerrs, -qmstd_tsvd[i]);push!(lerrs, -qmstd_sma[i])), 1:length(qmstd))
     map(i->(push!(herrs, qmstd[i]);push!(herrs, qmstd_tsvd[i]);push!(herrs, qmstd_sma[i])), 1:length(qmstd))
-    cell = Int[]; errx = Float64[]; grp = Int[]
-    map(i->(append!(cell,fill(i,3)); append!(errx,[-d,0,d]); append!(grp,collect(1:3))),1:length(qm))
-    tbl = (cell = cell, errx = errx, value = v, lerrors = lerrs, herrors = herrs, grp = grp)
+    tbl = (cell = [1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9],
+        errx = [-d,0,d,-d,0,d,-d,0,d,-d,0,d,-d,0,d,-d,0,d,-d,0,d,-d,0,d,-d,0,d,],
+        value = v,
+        lerrors = lerrs,
+        herrors = herrs,
+        grp = [1,2,3,1,2,3,1,2,3,1,2,3,1,2,3,1,2,3,1,2,3,1,2,3,1,2,3]
+        )
     barplot!(ax,tbl.cell, tbl.value, strokewidth = 0.5, gap=0.1, width=1, # bar_labels = :y,
         dodge = tbl.grp, # stack = tbl.grp,
         color = colors[tbl.grp])
@@ -203,9 +206,13 @@ function plot_qm4(qm, qm_tsvd, qm_sma, qm_hals, qmstd, qmstd_tsvd, qmstd_sma, qm
     map(i->(push!(v, qm[i]);push!(v, qm_tsvd[i]);push!(v, qm_sma[i]);push!(v, qm_hals[i])), 1:length(qm))
 #    map(i->(push!(lerrs, -qmstd[i]);push!(lerrs, -qmstd_tsvd[i]);push!(lerrs, -qmstd_sma[i])), 1:length(qmstd))
     map(i->(push!(herrs, qmstd[i]);push!(herrs, qmstd_tsvd[i]);push!(herrs, qmstd_sma[i]);push!(herrs, qmstd_hals[i])), 1:length(qmstd))
-    cell = Int[]; errx = Float64[]; grp = Int[]
-    map(i->(append!(cell,fill(i,4)); append!(errx,[-3d,-d,d,3d]); append!(grp,collect(1:4))),1:length(qm))
-    tbl = (cell = cell, errx = errx, value = v, lerrors = lerrs, herrors = herrs, grp = grp)
+    tbl = (cell = [1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8,9,9,9,9],
+        errx = [-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d],
+        value = v,
+        lerrors = lerrs,
+        herrors = herrs,
+        grp = [1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4]
+        )
     barplot!(ax,tbl.cell, tbl.value, strokewidth = 0.5, gap=0.1, width=1, # bar_labels = :y,
         dodge = tbl.grp, # stack = tbl.grp,
         color = colors[tbl.grp])
@@ -218,22 +225,26 @@ function plot_qm4(qm, qm_tsvd, qm_sma, qm_hals, qmstd, qmstd_tsvd, qmstd_sma, qm
     f
 end
 
-function plot_qm4_old(qm, qm_tsvd, qm_sma, qm_hals, qmstd, qmstd_tsvd, qmstd_sma, qmstd_hals, label, label_counts; ylabel="", d=0.12)
+function plot_qm4(qm, qm_tsvd, qm_sma, qm_hals, qmstd, qmstd_tsvd, qmstd_sma, qmstd_hals, label, label_counts; ylabel="", d=0.12)
     ulabel = unique(label)
     colors = Makie.wong_colors()
     f = Figure(size=(600,250)) # f.scene.viewport.val.widths
     ax = AMakie.Axis(f[1, 1], xlabel = "cell type", ylabel = ylabel, xticklabelrotation = pi/8,
                     xticks = (1:length(ulabel), ulabel), title = "")
-    ax2 = AMakie.Axis(f[1, 1], xticks = (1:1:length(label_counts), string.(label_counts)), xaxisposition = :top, yticks = (1:3,["","",""]),
-                    yticksvisible = false, ygridvisible = false, xgridvisible = false, title = "")
+    ax2 = AMakie.Axis(f[1, 1], xticks = (1:1:9, string.(label_counts)), xaxisposition = :top, yticks = (1:3,["","",""]), yticksvisible = false, ygridvisible = false,
+                    xgridvisible = false, title = "")
 #    hidexdecorations!(ax2)#, ticklabels = false)
     v = []; lerrs =[]; herrs =[]
     map(i->(push!(v, qm[i]);push!(v, qm_tsvd[i]);push!(v, qm_sma[i]);push!(v, qm_hals[i])), 1:length(qm))
 #    map(i->(push!(lerrs, -qmstd[i]);push!(lerrs, -qmstd_tsvd[i]);push!(lerrs, -qmstd_sma[i])), 1:length(qmstd))
     map(i->(push!(herrs, qmstd[i]);push!(herrs, qmstd_tsvd[i]);push!(herrs, qmstd_sma[i]);push!(herrs, qmstd_hals[i])), 1:length(qmstd))
-    cell = Int[]; errx = Float64[]; grp = Int[]
-    map(i->(append!(cell,fill(i,4)); append!(errx,[-3d,-d,d,3d]); append!(grp,collect(1:4))),1:length(qm))
-    tbl = (cell = cell, errx = errx, value = v, lerrors = lerrs, herrors = herrs, grp = grp)
+    tbl = (cell = [1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8,9,9,9,9],
+        errx = [-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d,-3d,-d,d,3d],
+        value = v,
+        lerrors = lerrs,
+        herrors = herrs,
+        grp = [1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4]
+        )
     barplot!(ax,tbl.cell, tbl.value, strokewidth = 0.5, gap=0.1, width=1, # bar_labels = :y,
         dodge = tbl.grp, # stack = tbl.grp,
         color = colors[tbl.grp])
@@ -252,7 +263,7 @@ function clustring_experi(method, Worg, label, label_counts; normalization=true,
         hc_h=nothing, # [optional] nothing or number
         gc_n_classes=40)
     l = size(Worg,1)
-    T = eltype(Worg); W = copy(Worg)
+    W = copy(Worg)
     if normalization
         for r in eachrow(W)
             n = norm(r)
@@ -289,8 +300,8 @@ function clustring_experi(method, Worg, label, label_counts; normalization=true,
         push!(precisionss,precisions); push!(recallss,recalls); push!(clusts, clust)
         #push!(avg_precs, avg_prec); push!(avg_recs, avg_rec)
     end
-    pre_means = T[]; pre_stds = T[]; rec_means = T[]; rec_stds = T[]
-    for i in 1:length(unique(label))
+    pre_means = []; pre_stds = []; rec_means = []; rec_stds = []
+    for i in 1:noc
         pre_mean = mean(getindex.(precisionss,i))
         pre_std = std(getindex.(precisionss,i))
         rec_mean = mean(getindex.(recallss,i))
@@ -306,9 +317,8 @@ function clustring_experi(method, Worg, label, label_counts; normalization=true,
 end
 
 # Hierarchical clustering after normalization : hc_h=300
-method = :hclust; normalization = true; noc = gtnoc+2
-nepmt = 1 # looks diterministic (no statistic)
-hc_h=nothing; hc_linkage=:average
+method = :hclust; normalization = true; noc = gtnoc+2; nepmt = 1 # looks diterministic (no statistic)
+hc_h=nothing; hc_linkage=:complete
 
 # Wpcbn = Wpcb./norm.(eachrow(Wpcb))
 # l = size(Wpcbn, 1) # number of cells
@@ -320,8 +330,8 @@ hc_h=nothing; hc_linkage=:average
 # result = hclust(D, linkage=:average)
 # clust_pcb = cutree(result; k=noc, h=hc_h)
 
-for noc in [gtnoc, gtnoc+2]
-for hc_linkage in [:complete, :average]
+for noc in [gtnoc, gtnoc+2, gtnoc+4]
+for hc_linkage in [:ward, :complete, :average]
 #    for hc_h in [nothing, 100, 300, 600, 1000, 2000]
         @show noc, hc_linkage, hc_h
         # Clustering after normalization (PCB)
@@ -329,21 +339,29 @@ for hc_linkage in [:complete, :average]
         pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren, wavg_recn, precisionssn, recallssn, clustsn =
             clustring_experi(method, Wpcb, label, label_counts; noc=noc, normalization=normalization,
                             nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+        # wavg_pren 0.8532968698165214
+        # wavg_recn 0.8609631996213466
 
         # Clustering after normalization (TSVD)
         pre_meansn_tsvd, pre_stdsn_tsvd, rec_meansn_tsvd, rec_stdsn_tsvd, wavg_pren_tsvd, wavg_recn_tsvd,
             precisionssn_tsvd, recallssn_tsvd, clustsn_tsvd = clustring_experi(method, Wtsvd, label, label_counts;
             noc=noc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+        # wavg_pren_tsvd 0.8249493965060913
+        # wavg_recn_tsvd 0.8627381374985211
 
         # Clustering after normalization (SMA)
         pre_meansn_sma, pre_stdsn_sma, rec_meansn_sma, rec_stdsn_sma, wavg_pren_sma, wavg_recn_sma,
             precisionssn_sma, recallssn_sma, clustsn_sma = clustring_experi(method, Wsma, label, label_counts;
             noc=noc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+        # wavg_pre_sma 0.8167916668483604
+        # wavg_rec_sma 0.8722044728434505
 
         # Clustering after normalization (HALS)
         pre_meansn_hals, pre_stdsn_hals, rec_meansn_hals, rec_stdsn_hals, wavg_pren_hals, wavg_recn_hals,
             precisionssn_hals, recallssn_hals, clustsn_hals = clustring_experi(method, Whals, label, label_counts;
             noc=noc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+        # wavg_pre_hals 0.8167916668483604
+        # wavg_rec_hals 0.8722044728434505
 
         @show wavg_pren, wavg_recn
         @show wavg_pren_tsvd, wavg_recn_tsvd
@@ -380,26 +398,75 @@ method = :bootstrap; normalization = false; nepmt = 20; bs_pvalue = 1e-3; bs_nre
 
 # Clustering without normalization (PCB)
 #gridsearch_params(Wpcb, label, [1e-3, 1e-4, 1e-5, 1e-6], [3,5,7,10])
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.001, 3, 150, 9)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.001, 5, 144, 9)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.001, 7, 130, 9)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.001, 10, 129, 9) <-----
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.0001, 3, 110, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.0001, 5, 100, 7)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.0001, 7, 96, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.0001, 10, 94, 7)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-5, 3, 75, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-5, 5, 69, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-5, 7, 68, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-5, 10, 65, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-6, 3, 52, 7)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-6, 5, 49, 7)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-6, 7, 50, 7)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-6, 10, 43, 7)
+
 pre_means, pre_stds, rec_means, rec_stds, wavg_pre, wavg_rec, precisionss, recallss, clusts =
     clustring_experi(method, Wpcb, label, label_counts; normalization=normalization,
                     nepmt=nepmt, bs_nresample=bs_nresample, bs_pvalue=bs_pvalue)
+# wavg_pre 0.908852208330317(1e-3,5), 0.9080230579171948(1e-3,10)
+#          0.8520882894712503(1e-4,5), 0.8330695895307648(1e-4,10)
+# wavg_rec 0.8984498875872678(1e-3,5), 0.8984735534256301(1e-3,10)
+#          0.8718317358892438(1e-4,5), 0.8708969352739321(1e-4,10)
 
 # Clustering without normalization (TSVD)
 pre_means_tsvd, pre_stds_tsvd, rec_means_tsvd, rec_stds_tsvd, wavg_pre_tsvd, wavg_rec_tsvd,
     precisionss_tsvd, recallss_tsvd, clusts_tsvd = clustring_experi(method, Wtsvd, label, label_counts;
     normalization=normalization, nepmt=nepmt, bs_nresample=bs_nresample, bs_pvalue=bs_pvalue)
+# wavg_pre_tsvd 0.8709154514410484(1e-3,5), 0.8646032089543317(1e-3,10)
+#               0.8028255214113876(1e-4,5), 0.7970858415130366(1e-4,10)
+# wavg_rec_tsvd 0.8684238551650693(1e-3,5), 0.8668264110756124(1e-3,10)
+#               0.856792095609987(1e-4,5), 0.8565199384688204(1e-4,10)
 
 # Clustering without normalization (SMA)
 #gridsearch_params(Wsma, label, [1e-3, 1e-4, 1e-5, 1e-6], [3,5,7,10])
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.001, 3, 180, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.001, 5, 178, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.001, 7, 167, 7)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.001, 10, 152, 7) <-----
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.0001, 3, 126, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.0001, 5, 114, 7)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.0001, 7, 111, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (0.0001, 10, 105, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-5, 3, 83, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-5, 5, 81, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-5, 7, 73, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-5, 10, 75, 8)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-6, 3, 69, 7)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-6, 5, 61, 7)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-6, 7, 57, 7)
+# (pvalue, nresample, maximum(clust), length(unique(celltypes))) = (1.0e-6, 10, 56, 7)
 pre_means_sma, pre_stds_sma, rec_means_sma, rec_stds_sma, wavg_pre_sma, wavg_rec_sma,
     precisionss_sma, recallss_sma, clusts_sma = clustring_experi(method, Wsma, label, label_counts;
     normalization=normalization, nepmt=nepmt, bs_nresample=bs_nresample, bs_pvalue=bs_pvalue)
+# wave_pre_sma  0.8674657204198589(1e-3,5), 0.8581916740089387(1e-3,10)
+#               0.8440651122317941(1e-4,5), 0.8400452598882309(1e-4,10)
+# wavg_rec_sma  0.881120577446456(1e-3,5),  0.8799491184475211(1e-3,10)
+#               0.8680333688320908(1e-4,5), 0.8669210744290617(1e-4,10)
 
 # Clustering without normalization (HALS)
 #gridsearch_params(Wsma, label, [1e-3, 1e-4, 1e-5, 1e-6], [3,5,7,10])
 pre_means_hals, pre_stds_hals, rec_means_hals, rec_stds_hals, wavg_pre_hals, wavg_rec_hals,
     precisionss_hals, recallss_hals, clusts_hals = clustring_experi(method, Whals, label, label_counts;
     normalization=normalization, nepmt=nepmt, bs_nresample=bs_nresample, bs_pvalue=bs_pvalue)
+# wave_pre_hals 0.8770460237041406(1e-3,5), 0.8657251321128286(1e-3,10)
+#               0.8728822101232738(1e-4,5), 0.8516510242170764(1e-4,10)
+# wavg_rec_hals 0.881374985208851(1e-3,5),  0.8803691870784522(1e-3,10)
+#               0.8765826529404804(1e-4,5), 0.8763459945568571(1e-4,10)
 
 f = plot_qm3(pre_means, pre_means_tsvd, pre_means_sma, pre_stds, pre_stds_tsvd, pre_stds_sma, label; ylabel="precision")
 save(joinpath(subworkpath,dataset,"Pre_wo_nor_$(method)_p$(bs_pvalue)_nr$(bs_nresample)_ne$(nepmt).png"),f,px_per_unit=2)
@@ -425,22 +492,38 @@ method = :bootstrap; normalization = true; nepmt = 10; bs_pvalue = 1e-4; bs_nres
 pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren, wavg_recn, precisionssn, recallssn, clustsn =
     clustring_experi(method, Wpcb, label, label_counts; normalization=normalization,
                     nepmt=nepmt, bs_nresample=bs_nresample, bs_pvalue=bs_pvalue)
+# wavg_pren 0.8973663024880435(1e-3,5)0, 0.9074112177296969(1e-3,100)
+#           0.9103654620378429(1e-4,50), 0.9105321425998115(1e-4,100)
+# wavg_recn 0.2995385161519347(1e-3,50), 0.30384569873387773(1e-3,100)
+#           0.35142586676133(1e-4,50), 0.3584546207549403(1e-4,100)
 
 # Clustering after normalization (TSVD)
 pre_meansn_tsvd, pre_stdsn_tsvd, rec_meansn_tsvd, rec_stdsn_tsvd, wavg_pren_tsvd, wavg_recn_tsvd,
     precisionssn_tsvd, recallssn_tsvd, clustsn_tsvd = clustring_experi(method, Wtsvd, label, label_counts;
     normalization=normalization, nepmt=nepmt, bs_nresample=bs_nresample, bs_pvalue=bs_pvalue)
+# wavg_pren_tsvd 0.8918370868837022(1e-3,50), 0.8921889549728975(1e-3,100)
+#                0.8367118995343917(1e-4,50), 0.834441031276884(1e-4,100)
+# wavg_recn_tsvd 0.2230623594840847(1e-3,50), 0.2262690805821796(1e-3,100)
+#                0.2563601940598746(1e-4,50), 0.2606082120459117(1e-4,100)
 
 # Clustering after normalization (SMA)
 pre_meansn_sma, pre_stdsn_sma, rec_meansn_sma, rec_stdsn_sma, wavg_pren_sma, wavg_recn_sma,
     precisionssn_sma, recallssn_sma, clustsn_sma = clustring_experi(method, Wsma, label, label_counts;
     normalization=normalization, nepmt=nepmt, bs_nresample=bs_nresample, bs_pvalue=bs_pvalue)
+# wavg_pre_sma 0.8620521640575513(1e-3,50), 0.8537549009497538(1e-3,100)
+#              0.8351879780338481(1e-4,50), 0.8335766275454753(1e-4,100)
+# wavg_rec_sma 0.23409064016092773(1e-3,50), 0.2355224233818483(1e-3,100)
+#              0.33280085197018106(1e-4,50), 0.333238669979884(1e-4,100)
 
 # Clustering after normalization (HALS)
 #gridsearch_params(Wsma, label, [1e-3, 1e-4, 1e-5, 1e-6], [3,5,7,10])
 pre_meansn_hals, pre_stdsn_hals, rec_meansn_hals, rec_stdsn_hals, wavg_pren_hals, wavg_recn_hals,
     precisionssn_hals, recallssn_hals, clustsn_hals = clustring_experi(method, Wsma, label, label_counts;
     normalization=normalization, nepmt=nepmt, bs_nresample=bs_nresample, bs_pvalue=bs_pvalue)
+# wave_pre_hals 0.8604429244812161(1e-3,50), 0.8593044568484652(1e-3,100)
+#               0.8390796548435766(1e-4,50), 0.8313692612628543(1e-4,100)
+# wavg_rec_hals 0.23207904390013018(1e-3,50), 0.23456395692817422(1e-3,100)
+#               0.3314518991835286(1e-4,50), 0.3318187196781446(1e-4,100)
 
 f = plot_qm3(pre_meansn, pre_meansn_tsvd, pre_meansn_sma, pre_stdsn, pre_stdsn_tsvd, pre_stdsn_sma, label; ylabel="precision")
 save(joinpath(subworkpath,dataset,"Pre_aftr_nor_$(method)_p$(bs_pvalue)_nr$(bs_nresample)_ne$(nepmt).png"),f,px_per_unit=2)
@@ -466,16 +549,22 @@ method = :kmeans; normalization = true; nepmt = 20; km_maxiter = 100
 pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren, wavg_recn, precisionssn, recallssn, clustsn =
     clustring_experi(method, Wpcb, label, label_counts; normalization=normalization,
                     nepmt=nepmt, km_maxiter = km_maxiter)
+# wavg_pren 0.8432044819411357(iter100)
+# wavg_recn 0.8844515441959531(iter100)
 
 # Clustering after normalization (TSVD)
 pre_meansn_tsvd, pre_stdsn_tsvd, rec_meansn_tsvd, rec_stdsn_tsvd, wavg_pren_tsvd, wavg_recn_tsvd,
     precisionssn_tsvd, recallssn_tsvd, clustsn_tsvd = clustring_experi(method, Wtsvd, label, label_counts;
     normalization=normalization, nepmt=nepmt, km_maxiter = km_maxiter)
+# wavg_pren_tsvd 0.8055573439186274
+# wavg_recn_tsvd 0.8458348124482309
 
 # Clustering after normalization (SMA)
 pre_meansn_sma, pre_stdsn_sma, rec_meansn_sma, rec_stdsn_sma, wavg_pren_sma, wavg_recn_sma,
     precisionssn_sma, recallssn_sma, clustsn_sma = clustring_experi(method, Wsma, label, label_counts;
     normalization=normalization, nepmt=nepmt, km_maxiter = km_maxiter)
+# wavg_pre_sma 0.8248949167782013
+# wavg_rec_sma 0.876363743935629
 
 f = plot_qm3(pre_meansn, pre_meansn_tsvd, pre_meansn_sma, pre_stdsn, pre_stdsn_tsvd, pre_stdsn_sma, label; ylabel="precision")
 save(joinpath(subworkpath,dataset,"Pre_aftr_nor_$(method)_ne$(nepmt).png"),f,px_per_unit=2)
@@ -491,6 +580,8 @@ save(joinpath(subworkpath,dataset,"aftr_nor_$(method)_ne$(nepmt).jld2"),
 
 
 # DBSCAN (Density-Based Spatial Clustering of Applications with Noise) after normalization : ds_radius=40; ds_min_ngbr=3; ds_min_clsize = 3
+using Clustering
+
 method = :dbscan; normalization = true; nepmt = 20; ds_radius=40; ds_min_ngbr=3; ds_min_clsize = 3
 for ds_radius in [100]
     for ds_min_ngbr in [100]
@@ -511,16 +602,22 @@ end
 pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren, wavg_recn, precisionssn, recallssn, clustsn =
     clustring_experi(method, Wpcb, label, label_counts; normalization=normalization,
                     nepmt=nepmt, ds_radius=ds_radius, ds_min_ngbr=ds_min_ngbr, ds_min_clsize=ds_min_clsize)
+# wavg_pren 0.08927021104531527
+# wavg_recn 0.2987812093243403
 
 # Clustering after normalization (TSVD)
 pre_meansn_tsvd, pre_stdsn_tsvd, rec_meansn_tsvd, rec_stdsn_tsvd, wavg_pren_tsvd, wavg_recn_tsvd,
     precisionssn_tsvd, recallssn_tsvd, clustsn_tsvd = clustring_experi(method, Wtsvd, label, label_counts;
     normalization=normalization, nepmt=nepmt, ds_radius=ds_radius, ds_min_ngbr=ds_min_ngbr, ds_min_clsize=ds_min_clsize)
+# wavg_pren_tsvd 0.08927021104531527
+# wavg_recn_tsvd 0.2987812093243403
 
 # Clustering after normalization (SMA)
 pre_meansn_sma, pre_stdsn_sma, rec_meansn_sma, rec_stdsn_sma, wavg_pren_sma, wavg_recn_sma,
     precisionssn_sma, recallssn_sma, clustsn_sma = clustring_experi(method, Wsma, label, label_counts;
     normalization=normalization, nepmt=nepmt, ds_radius=ds_radius, ds_min_ngbr=ds_min_ngbr, ds_min_clsize=ds_min_clsize)
+# wavg_pre_sma 0.08927021104531527
+# wavg_rec_sma 0.2987812093243403
 
 f = plot_qm3(pre_meansn, pre_meansn_tsvd, pre_meansn_sma, pre_stdsn, pre_stdsn_tsvd, pre_stdsn_sma, label; ylabel="precision")
 save(joinpath(subworkpath,dataset,"Pre_aftr_nor_$(method)_r$(ds_radius)_mn$(ds_min_ngbr)_mc$(ds_min_clsize)_ne$(nepmt).png"),f,px_per_unit=2)
@@ -558,21 +655,29 @@ for hc_linkage in [:ward, :complete, :average]
         pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren, wavg_recn, precisionssn, recallssn, clustsn =
             clustring_experi(method, Wpcb, label, label_counts; noc=noc, normalization=normalization,
                             nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+        # wavg_pren 0.8532968698165214
+        # wavg_recn 0.8609631996213466
 
         # Clustering after normalization (TSVD)
         pre_meansn_tsvd, pre_stdsn_tsvd, rec_meansn_tsvd, rec_stdsn_tsvd, wavg_pren_tsvd, wavg_recn_tsvd,
             precisionssn_tsvd, recallssn_tsvd, clustsn_tsvd = clustring_experi(method, Wtsvd, label, label_counts;
             noc=noc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+        # wavg_pren_tsvd 0.8249493965060913
+        # wavg_recn_tsvd 0.8627381374985211
 
         # Clustering after normalization (SMA)
         pre_meansn_sma, pre_stdsn_sma, rec_meansn_sma, rec_stdsn_sma, wavg_pren_sma, wavg_recn_sma,
             precisionssn_sma, recallssn_sma, clustsn_sma = clustring_experi(method, Wsma, label, label_counts;
             noc=noc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+        # wavg_pre_sma 0.8167916668483604
+        # wavg_rec_sma 0.8722044728434505
 
         # Clustering after normalization (HALS)
         pre_meansn_hals, pre_stdsn_hals, rec_meansn_hals, rec_stdsn_hals, wavg_pren_hals, wavg_recn_hals,
             precisionssn_hals, recallssn_hals, clustsn_hals = clustring_experi(method, Whals, label, label_counts;
             noc=noc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+        # wavg_pre_hals 0.8167916668483604
+        # wavg_rec_hals 0.8722044728434505
 
         @show wavg_pren, wavg_recn
         @show wavg_pren_tsvd, wavg_recn_tsvd
@@ -614,16 +719,22 @@ method = :gmm; normalization = true; nepmt = 20; gc_n_classes=40
 pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren, wavg_recn, precisionssn, recallssn, clustsn =
     clustring_experi(method, Wpcb, label, label_counts; normalization=normalization,
                     nepmt=nepmt, gc_n_classes=gc_n_classes)
+# wavg_pren 0.8432044819411357(iter100)
+# wavg_recn 0.8844515441959531(iter100)
 
 # Clustering after normalization (TSVD)
 pre_meansn_tsvd, pre_stdsn_tsvd, rec_meansn_tsvd, rec_stdsn_tsvd, wavg_pren_tsvd, wavg_recn_tsvd,
     precisionssn_tsvd, recallssn_tsvd, clustsn_tsvd = clustring_experi(method, Wtsvd, label, label_counts;
     normalization=normalization, nepmt=nepmt, gc_n_classes=gc_n_classes)
+# wavg_pren_tsvd 0.8055573439186274
+# wavg_recn_tsvd 0.8458348124482309
 
 # Clustering after normalization (SMA)
 pre_meansn_sma, pre_stdsn_sma, rec_meansn_sma, rec_stdsn_sma, wavg_pren_sma, wavg_recn_sma,
     precisionssn_sma, recallssn_sma, clustsn_sma = clustring_experi(method, Wsma, label, label_counts;
     normalization=normalization, nepmt=nepmt, gc_n_classes=gc_n_classes)
+# wavg_pre_sma 0.8248949167782013
+# wavg_rec_sma 0.876363743935629
 
 f = plot_qm3(pre_meansn, pre_meansn_tsvd, pre_meansn_sma, pre_stdsn, pre_stdsn_tsvd, pre_stdsn_sma, label; ylabel="precision")
 save(joinpath(subworkpath,dataset,"Pre_aftr_nor_$(method)_nc$(gc_n_classes))_ne$(nepmt).png"),f,px_per_unit=2)
