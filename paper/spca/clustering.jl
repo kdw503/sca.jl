@@ -256,7 +256,7 @@ function clustring_experi(method, Worg, label, label_counts; normalization=true,
     if normalization
         for r in eachrow(W)
             n = norm(r)
-            r ./= n
+            r = n == 0 ? r : r ./= n
         end
     end
     precisionss=[]; recallss=[]; avg_precs=[]; avg_recs=[]; clusts=[]
@@ -306,7 +306,7 @@ function clustring_experi(method, Worg, label, label_counts; normalization=true,
 end
 
 # Hierarchical clustering after normalization : hc_h=300
-method = :hclust; normalization = true; noc = gtnoc+2
+method = :hclust; normalization = true; clnoc = gtnoc+2
 nepmt = 1 # looks diterministic (no statistic)
 hc_h=nothing; hc_linkage=:average
 
@@ -320,30 +320,30 @@ hc_h=nothing; hc_linkage=:average
 # result = hclust(D, linkage=:average)
 # clust_pcb = cutree(result; k=noc, h=hc_h)
 
-for noc in [gtnoc, gtnoc+2]
+for clnoc in [gtnoc, gtnoc+2]
 for hc_linkage in [:complete, :average]
 #    for hc_h in [nothing, 100, 300, 600, 1000, 2000]
-        @show noc, hc_linkage, hc_h
+        @show clnoc, hc_linkage, hc_h
         # Clustering after normalization (PCB)
         #gridsearch_params(Wpcbn, label, [1e-1, 1e-2, 1e-3, 1e-4, 1e-5], [1,2,3])
         pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren, wavg_recn, precisionssn, recallssn, clustsn =
-            clustring_experi(method, Wpcb, label, label_counts; noc=noc, normalization=normalization,
+            clustring_experi(method, Wpcb, label, label_counts; noc=clnoc, normalization=normalization,
                             nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
 
         # Clustering after normalization (TSVD)
         pre_meansn_tsvd, pre_stdsn_tsvd, rec_meansn_tsvd, rec_stdsn_tsvd, wavg_pren_tsvd, wavg_recn_tsvd,
             precisionssn_tsvd, recallssn_tsvd, clustsn_tsvd = clustring_experi(method, Wtsvd, label, label_counts;
-            noc=noc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+            noc=clnoc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
 
         # Clustering after normalization (SMA)
         pre_meansn_sma, pre_stdsn_sma, rec_meansn_sma, rec_stdsn_sma, wavg_pren_sma, wavg_recn_sma,
             precisionssn_sma, recallssn_sma, clustsn_sma = clustring_experi(method, Wsma, label, label_counts;
-            noc=noc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+            noc=clnoc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
 
         # Clustering after normalization (HALS)
         pre_meansn_hals, pre_stdsn_hals, rec_meansn_hals, rec_stdsn_hals, wavg_pren_hals, wavg_recn_hals,
             precisionssn_hals, recallssn_hals, clustsn_hals = clustring_experi(method, Whals, label, label_counts;
-            noc=noc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+            noc=clnoc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
 
         @show wavg_pren, wavg_recn
         @show wavg_pren_tsvd, wavg_recn_tsvd
@@ -351,10 +351,10 @@ for hc_linkage in [:complete, :average]
         @show wavg_pren_hals, wavg_recn_hals
 
         f = plot_qm4(pre_meansn, pre_meansn_tsvd, pre_meansn_sma, pre_meansn_hals, pre_stdsn, pre_stdsn_tsvd, pre_stdsn_sma, pre_stdsn_hals, label, label_counts; ylabel="precision")
-        save(joinpath(subworkpath,dataset,"Pre_aftr_nor_$(method)_noc$(noc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt)_wHALS.png"),f,px_per_unit=2)
+        save(joinpath(subworkpath,dataset,"Pre_aftr_nor_$(method)_noc$(clnoc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt)_wHALS.png"),f,px_per_unit=2)
         f = plot_qm4(rec_meansn, rec_meansn_tsvd, rec_meansn_sma, rec_meansn_hals, rec_stdsn, rec_stdsn_tsvd, rec_stdsn_sma, rec_stdsn_hals, label, label_counts; ylabel="recalls")
-        save(joinpath(subworkpath,dataset,"Rec_aftr_nor_$(method)_noc$(noc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt)_wHALS.png"),f,px_per_unit=2)
-        save(joinpath(subworkpath,dataset,"aftr_nor_$(method)_noc$(noc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt).jld2"),
+        save(joinpath(subworkpath,dataset,"Rec_aftr_nor_$(method)_noc$(clnoc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt)_wHALS.png"),f,px_per_unit=2)
+        save(joinpath(subworkpath,dataset,"aftr_nor_$(method)_noc$(clnoc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt).jld2"),
             "pre_meansn", pre_meansn, "pre_meansn_tsvd", pre_meansn_tsvd, "pre_meansn_sma", pre_meansn_sma, "pre_meansn_hals", pre_meansn_hals,
             "pre_stdsn", pre_stdsn, "pre_stdsn_tsvd", pre_stdsn_tsvd, "pre_stdsn_sma", pre_stdsn_sma,"pre_stdsn_hals", pre_stdsn_hals,
             "rec_meansn", rec_meansn, "rec_meansn_tsvd", rec_meansn_tsvd, "rec_meansn_sma", rec_meansn_sma, "rec_meansn_hals", rec_meansn_hals,
@@ -366,9 +366,9 @@ for hc_linkage in [:complete, :average]
 #    end
 end
 end
-for noc in [gtnoc, gtnoc+2]
+for clnoc in [gtnoc, gtnoc+2]
     for hc_linkage in [:average, :complete]
-        dd = load(joinpath(subworkpath,dataset,"aftr_nor_hclust_noc$(noc)_lkg$(hc_linkage)_hnothing_ne1.jld2"))
+        dd = load(joinpath(subworkpath,dataset,"aftr_nor_hclust_noc$(clnoc)_lkg$(hc_linkage)_hnothing_ne1.jld2"))
         pres = map(v->round(v,sigdigits=4), [dd["wavg_pren"], dd["wavg_pren_tsvd"], dd["wavg_pren_sma"], dd["wavg_pren_hals"]])
         recs = map(v->round(v,sigdigits=4), [dd["wavg_recn"], dd["wavg_recn_tsvd"], dd["wavg_recn_sma"], dd["wavg_recn_hals"]])
         @show pres, recs
@@ -536,7 +536,7 @@ save(joinpath(subworkpath,dataset,"aftr_nor_$(method)_r$(ds_radius)_mn$(ds_min_n
 
 
 # Hierarchical clustering after normalization : hc_h=300
-method = :hclust; normalization = true; noc = 11; nepmt = 1 # looks diterministic (no statistic)
+method = :hclust; normalization = true; clnoc = 11; nepmt = 1 # looks diterministic (no statistic)
 hc_h=nothing; hc_linkage=:complete
 
 Wpcbn = Wpcb./norm.(eachrow(Wpcb))
@@ -547,32 +547,32 @@ for i in 1:l, j in i:l
 end
 D += D'
 result = hclust(D, linkage=:average)
-clust_pcb = cutree(result; k=noc, h=hc_h)
+clust_pcb = cutree(result; k=clnoc, h=hc_h)
 
-for noc in [9. 11, 13]
+for clnoc in [9. 11, 13]
 for hc_linkage in [:ward, :complete, :average]
 #    for hc_h in [nothing, 100, 300, 600, 1000, 2000]
-        @show noc, hc_linkage, hc_h
+        @show clnoc, hc_linkage, hc_h
         # Clustering after normalization (PCB)
         #gridsearch_params(Wpcbn, label, [1e-1, 1e-2, 1e-3, 1e-4, 1e-5], [1,2,3])
         pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren, wavg_recn, precisionssn, recallssn, clustsn =
-            clustring_experi(method, Wpcb, label, label_counts; noc=noc, normalization=normalization,
+            clustring_experi(method, Wpcb, label, label_counts; noc=clnoc, normalization=normalization,
                             nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
 
         # Clustering after normalization (TSVD)
         pre_meansn_tsvd, pre_stdsn_tsvd, rec_meansn_tsvd, rec_stdsn_tsvd, wavg_pren_tsvd, wavg_recn_tsvd,
             precisionssn_tsvd, recallssn_tsvd, clustsn_tsvd = clustring_experi(method, Wtsvd, label, label_counts;
-            noc=noc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+            noc=clnoc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
 
         # Clustering after normalization (SMA)
         pre_meansn_sma, pre_stdsn_sma, rec_meansn_sma, rec_stdsn_sma, wavg_pren_sma, wavg_recn_sma,
             precisionssn_sma, recallssn_sma, clustsn_sma = clustring_experi(method, Wsma, label, label_counts;
-            noc=noc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+            noc=clnoc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
 
         # Clustering after normalization (HALS)
         pre_meansn_hals, pre_stdsn_hals, rec_meansn_hals, rec_stdsn_hals, wavg_pren_hals, wavg_recn_hals,
             precisionssn_hals, recallssn_hals, clustsn_hals = clustring_experi(method, Whals, label, label_counts;
-            noc=noc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+            noc=clnoc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
 
         @show wavg_pren, wavg_recn
         @show wavg_pren_tsvd, wavg_recn_tsvd
@@ -580,10 +580,10 @@ for hc_linkage in [:ward, :complete, :average]
         @show wavg_pren_hals, wavg_recn_hals
 
         f = plot_qm4(pre_meansn, pre_meansn_tsvd, pre_meansn_sma, pre_meansn_hals, pre_stdsn, pre_stdsn_tsvd, pre_stdsn_sma, pre_stdsn_hals, label, label_counts; ylabel="precision")
-        save(joinpath(subworkpath,dataset,"Pre_aftr_nor_$(method)_noc$(noc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt)_wHALS.png"),f,px_per_unit=2)
+        save(joinpath(subworkpath,dataset,"Pre_aftr_nor_$(method)_noc$(clnoc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt)_wHALS.png"),f,px_per_unit=2)
         f = plot_qm4(rec_meansn, rec_meansn_tsvd, rec_meansn_sma, rec_meansn_hals, rec_stdsn, rec_stdsn_tsvd, rec_stdsn_sma, rec_stdsn_hals, label, label_counts; ylabel="recalls")
-        save(joinpath(subworkpath,dataset,"Rec_aftr_nor_$(method)_noc$(noc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt)_wHALS.png"),f,px_per_unit=2)
-        save(joinpath(subworkpath,dataset,"aftr_nor_$(method)_noc$(noc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt).jld2"),
+        save(joinpath(subworkpath,dataset,"Rec_aftr_nor_$(method)_noc$(clnoc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt)_wHALS.png"),f,px_per_unit=2)
+        save(joinpath(subworkpath,dataset,"aftr_nor_$(method)_noc$(clnoc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt).jld2"),
             "pre_meansn", pre_meansn, "pre_meansn_tsvd", pre_meansn_tsvd, "pre_meansn_sma", pre_meansn_sma, "pre_meansn_hals", pre_meansn_hals,
             "pre_stdsn", pre_stdsn, "pre_stdsn_tsvd", pre_stdsn_tsvd, "pre_stdsn_sma", pre_stdsn_sma,"pre_stdsn_hals", pre_stdsn_hals,
             "rec_meansn", rec_meansn, "rec_meansn_tsvd", rec_meansn_tsvd, "rec_meansn_sma", rec_meansn_sma, "rec_meansn_hals", rec_meansn_hals,
@@ -595,9 +595,9 @@ for hc_linkage in [:ward, :complete, :average]
 #    end
 end
 end
-for noc in [9, 11]
+for clnoc in [9, 11]
     for hc_linkage in [:average, :complete]
-        dd = load(joinpath(subworkpath,dataset,"aftr_nor_hclust_noc$(noc)_lkg$(hc_linkage)_hnothing_ne1.jld2"))
+        dd = load(joinpath(subworkpath,dataset,"aftr_nor_hclust_noc$(clnoc)_lkg$(hc_linkage)_hnothing_ne1.jld2"))
         pres = map(v->round(v,sigdigits=4), [dd["wavg_pren"], dd["wavg_pren_tsvd"], dd["wavg_pren_sma"], dd["wavg_pren_hals"]])
         recs = map(v->round(v,sigdigits=4), [dd["wavg_recn"], dd["wavg_recn_tsvd"], dd["wavg_recn_sma"], dd["wavg_recn_hals"]])
         @show pres, recs

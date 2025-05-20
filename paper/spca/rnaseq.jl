@@ -16,7 +16,7 @@ include(joinpath(workpath,"utils.jl"))
 
 #=============== seqRNA ===============#
 ##### SMA method (using RCall)
-using RCall
+using RCall, StatsBase
 
 R"""
 library(scRNAseq)
@@ -28,7 +28,18 @@ library(Matrix) # as.matrix
 library(ggplot2)
 """
 
-dataset = "Xin" # Baron, Muraro, Segerstolpe, Xin
+# datasets = ["Baron", "Muraro", "Segerstolpe", "Xin"]
+# for dataset in datasets
+#     dd = load(joinpath(subworkpath, "raw", dataset, "Xr_$(dataset).jld2"))
+#     Xr, label, genename = dd["Xr"], dd["label"], dd["genename"]
+#     normXr = norm(Xr)
+#     Xr = Xr ./ normXr
+#     Xr = log10.(Xr .+ 1)
+#     save(joinpath(subworkpath, dataset, "Xr_$(dataset).jld2"), "Xr", Xr, "label", label, "genename", genename)
+#     Xr = load(joinpath(subworkpath, dataset, "Xr_$(dataset).jld2"), "Xr")
+#     @show size(Xr)
+# end
+dataset = "Muraro" # Baron(Int), Muraro(Float raw?), Segerstolpe(Int), Xin(Float raw?)
 @rput subworkpath
 @rput dataset
 R"""
@@ -83,7 +94,7 @@ if dataset in ["Baron", "Muraro"]
                     dplyr::count(label) %>%
                     filter(n > 100)
     dat1 <- dat[gene.select, colData(dat)$label %in% label.select$label]
-    label <- setNames(factor(data.frame(colData(dat1))$cell.type), colnames(dat1)) # cell type label
+    label <- setNames(factor(data.frame(colData(dat1))$label), colnames(dat1)) # cell type label
     count <- counts(dat1)
     genename <- as.matrix(rownames(dat1))                       # gene names
     """
@@ -123,32 +134,33 @@ end
 @rget genename
 @rget label
 label = string.(Array(label))
-noc = length(unique(label))
+gtnoc = length(unique(label))
 # save dataset as JLD2 file
 R"Xr = unname(count)"
 R"count_matrix_dense <- as.matrix(count)"
 Xr = rcopy(R"count_matrix_dense") # Float64
 save(joinpath(subworkpath, dataset, "Xr_$(dataset).jld2"), "Xr", Xr, "label", label, "genename", genename)
 dd = load(joinpath(subworkpath, dataset, "Xr_$(dataset).jld2"))
-Xr = dd["Xr"]
+Xr, label, genename = dd["Xr"], dd["label"], dd["genename"]
+ulabel = unique(label); cmap = countmap(label); label_counts = map(l->cmap[l],ulabel)
 f = Figure()
 ylimit = 200; bins = 100
 ax = AMakie.Axis(f[1, 1],limits = (nothing,(0,ylimit)))
 ht1 = hist!(ax,vec(Xr), bins=bins, strokewidth = 1, strokecolor = :black) # bins is number of bins
 save(joinpath(subworkpath, dataset, "Xr_histo_bins$(bins)_ylimit$(ylimit).png"),f)
 
-@rput noc
+@rput gtnoc
 rtsma = @elapsed R"""
-scar <- sca(t(count), k = noc, # gamma = 12,
+scar <- sca(t(Xr), k = gtnoc, # gamma = 12, # Xr is geneXcell, t(Xr) is cellXgene, so gene is sparsitified
                center = F, scale = F,
                epsilon = 1e-3)
 n.gene <- apply(!!scar$loadings, 2, sum) # sum of non zero loadings number for each gene
 ngene_sma <- n.gene
-Wsma <- as.matrix(scar$scores)
+Wsma <- as.matrix(scar$scores) # score
 Htsma <- as.matrix(scar$loadings)
 """
-@rget Wsma
-@rget Htsma
+@rget Wsma # cell
+@rget Htsma # gene
 @rget ngene_sma
 Hsma = Htsma'
 #@rget scar
@@ -156,11 +168,11 @@ Hsma = Htsma'
 
 # initialization only
 rtirlba = @elapsed R"""  ## initialize
-  x = scale(x = t(count),
+  x = scale(x = t(Xr),
             center = F,
             scale = F)
   # s = RSpectra::svds(x, k)
-  s = irlba::irlba(x, noc, tol = 1e-10)
+  s = irlba::irlba(x, gtnoc, tol = 1e-10)
   z = s$u
   b = diag(s$d)
   y = s$v
@@ -170,7 +182,7 @@ rtirlba = @elapsed R"""  ## initialize
 
 # Without shrink SMA
 rtsmawosh = @elapsed R"""
-factors_sma <- sca(t(count), k = noc, gamma = Inf,
+factors_sma <- sca(t(Xr), k = gtnoc, gamma = Inf,
                center = F, scale = F,
                epsilon = 1e-3)
 """
@@ -181,10 +193,18 @@ fv = LCSVD.fitd(X,rW*rH)
 Xy = X*rH'*inv(rH*rH')*rH; pve = norm(Xy)^2/normX2 # PVE : 0.9433741435634796
 LCSVD.normalizeW!(rW,rH); sw = norm(rW,1) # Sparsity : 317.95
 
+clnocdic = Dict("Baron" => 9, "Muraro" => 9, "Segerstolpe" => 9, "Xin" => 6)
+clnoc = clnocdic[dataset]
+method = :hclust; normalization = true; nepmt = 1; hc_linkage = :average; hc_h = nothing
+pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren_sma, wavg_recn_sma, precisionssn, recallssn, clustsn =
+clustring_experi(method, Wsma, label, label_counts; noc=clnoc, normalization=normalization,
+                nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+@show wavg_pren_sma, wavg_recn_sma # Muraro 0.7133540938457136, 0.6879217273954116
+
 # n genes
 LCSVD.normalizeW!(Hsma',Wsma')
 m = 0.1
-for i in 1:noc
+for i in 1:gtnoc
     @show i#; @show Hsma[i,:][Hsma[i,:].>m]; @show Hsma[i,:][Hsma[i,:].<-m];  @show genename[Hsma[i,:].>m]; @show genename[Hsma[i,:].<-m];
     sindps = sortperm(Hsma[i,:][Hsma[i,:].>m],rev=true); sindps_cut = sindps[1:(min(end,3))]
     sindns = sortperm(Hsma[i,:][Hsma[i,:].<-m]); sindns_cut = sindns[1:(min(end,3))]
@@ -197,6 +217,7 @@ for i in 1:noc
 end
 
 # SMA Boxplot
+@rput Wsma
 R"""
 if (dataset == "Segerstolpe") {
     ylim = c(-10, 300)
@@ -205,7 +226,7 @@ if (dataset == "Segerstolpe") {
 } else {
     ylim = c(-4, 2)
 }
-scar$scores %>%
+Wsma %>%
   reshape2::melt(varnames = c("cell", "PC"),
                  value.name = "scores") %>%
   mutate(PC = factor(PC), label = label[cell]) %>%
@@ -225,14 +246,18 @@ scar$scores %>%
 ##### PCB method
 
 # Load the data set
-ddseq = load(joinpath(subworkpath,dataset,"Xr_$(dataset).jld2"))
-Xr = ddseq["Xr"]; X = Array(Xr')
-label = ddseq["label"]
-
 initmethod=:tsvd; svdmethod=:tsvd; nac=0
 #initmethod=:svd; svdmethod=:svd
-rtisvd = @elapsed U, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(Xr, noc, nac; initmethod=initmethod, svdmethod=svdmethod)
-V = copy(H0'); N0t = copy(N0'); Wisvd = V*D; Htisvd = U
+rtisvd = @elapsed U, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(Xr', gtnoc, nac; initmethod=initmethod, svdmethod=svdmethod)
+V = copy(H0'); N0t = copy(N0')
+Wisvd = U*D # cell
+Htisvd = V # gene
+
+method = :hclust; normalization = true; nepmt = 1; hc_linkage = :average; hc_h = nothing
+pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren_isvd, wavg_recn_isvd, precisionssn, recallssn, clustsn =
+clustring_experi(method, Wisvd, label, label_counts; noc=clnoc, normalization=normalization,
+                nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+@show wavg_pren_isvd, wavg_recn_isvd
 
 # boxplot for ISVD
 @rput Wisvd
@@ -263,7 +288,7 @@ Wisvd %>%
 
 m = 0.1
 H = U'
-for i in 1:noc
+for i in 1:gtnoc
     @show i#; @show H[i,:][H[i,:].>m]; @show H[i,:][H[i,:].<-m];  @show genename[H[i,:].>m]; @show genename[H[i,:].<-m];
     sindps = sortperm(H[i,:][H[i,:].>m],rev=true); sindps_cut = sindps[1:(min(end,3))]
     sindns = sortperm(H[i,:][H[i,:].<-m]); sindns_cut = sindns[1:(min(end,3))]
@@ -275,14 +300,14 @@ for i in 1:noc
     @show genes_n, minval, cnt_n
 end
 
-α=0.001; noc = 9 # Muraro
-α=0.05; noc = 7 # Segerstolpe
-α=0.003; βw = 5.0; noc = 6 # Xin
+α=0.001; gtnoc = 9 # Muraro
+α=0.05; gtnoc = 7 # Segerstolpe
+α=0.003; βw = 0; gtnoc = 6 # Xin
 for α in [0.001, 0.003, 0.005, 0.007, 0.01, 0.03, 0.05, 0.07, 0.1]
 β1 = βw; β2= βw; α1 = α2 = α
 r=0.3; tol=1e-7
 T = eltype(U)
-maxiter = 50#Int(ceil(log(eps(T))/log(r))) #lcsvd_maxiter
+maxiter = Int(ceil(log(eps(T))/log(r))) #lcsvd_maxiter
 alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2,
     r=r, useprecond=false, usedenoiseW0H0=false, optim_method = :lbfgs,
     uselv=false, maxiter = maxiter, inner_maxiter = 1000, store_trace = false,
@@ -290,27 +315,27 @@ alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2,
     f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = tol, successive_f_converge=0);
 M1, N1t = copy(M0), copy(N0t)
 
-rtpcb = @elapsed rst1 = LCSVD.solve!(alg, T.(Xr), U, V, D, M1, N1t);
+rtpcb = @elapsed rst1 = LCSVD.solve!(alg, T.(Xr'), U, V, D, M1, N1t);
 W1, H1 = rst1.W, rst1.Ht'
 LCSVD.flip2makepos!(W1,H1)
 LCSVD.normalizeW!(W1,H1)
-Wpcb, Htpcb = Array(H1'), W1
+Wpcb, Htpcb = W1, Array(H1') # cell, gene
 
 method = :hclust; normalization = true; nepmt = 1; hc_linkage = :average; hc_h = nothing
 pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren, wavg_recn, precisionssn, recallssn, clustsn =
-clustring_experi(method, Wpcb, label, label_counts; noc=noc, normalization=normalization,
+clustring_experi(method, Wpcb, label, label_counts; noc=clnoc, normalization=normalization,
                 nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
-@show α, wavg_pren, wavg_recn
+@show α, wavg_pren, wavg_recn # Muraro 0.007, 0.7878366617123049, 0.6538461538461539
 end
 
-save(joinpath(subworkpath,dataset,"$(dataset)_Result_noc$(noc)_sp_nn.jld2"),
+save(joinpath(subworkpath,dataset,"$(dataset)_Result_noc$(gtnoc)_sp_nn.jld2"),
     "Wisvd", Wisvd, "Htisvd", Htisvd, "rtisvd", rtisvd,
     "Wtsvd", Wtsvd, "Httsvd", Httsvd, "rttsvd", rttsvd,
     "Wpcb", Wpcb, "Htpcb", Htpcb, "rtpcb", rtpcb)
 
 m = 0.1
 H = Htpcb'
-for i in 1:noc
+for i in 1:gtnoc
     @show i#; @show H[i,:][H[i,:].>m]; @show H[i,:][H[i,:].<-m];  @show genename[H[i,:].>m]; @show genename[H[i,:].<-m];
     sindps = sortperm(H[i,:][H[i,:].>m],rev=true); sindps_cut = sindps[1:(min(end,3))]
     sindns = sortperm(H[i,:][H[i,:].<-m]); sindns_cut = sindns[1:(min(end,3))]
@@ -430,7 +455,7 @@ end
 
 # HALS
 prefix="hals"; @show prefix
-rtnndsvd = @elapsed Whals0, Hhals0 = NMF.nndsvd(T.(Xr), noc, variant=:ar);
+rtnndsvd = @elapsed Whals0, Hhals0 = NMF.nndsvd(T.(Xr), gtnoc, variant=:ar);
 mfmethod = :HALS; αhals=0.1; maxiter = 60; tol=-1
 αhals = 0.1
 W, H = copy(Whals0), copy(Hhals0);
@@ -444,9 +469,15 @@ Xy = X*Hthals*inv(Hthals'*Hthals)*Hthals'; pve_hals = norm(Xy)^2/normX2 # PVE : 
 score = copy(Whals); loading = copy(Hthals')
 LCSVD.normalizeW!(score,loading); sw_hals = norm(score,1) # Sparsity : 312.3017367520704
 
+method = :hclust; normalization = true; nepmt = 1; hc_linkage = :average; hc_h = nothing
+pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren, wavg_recn, precisionssn, recallssn, clustsn =
+clustring_experi(method, Whals, label, label_counts; noc=clnoc, normalization=normalization,
+                nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+@show αhals, wavg_pren, wavg_recn # Muraro 0.1, 0.8376396875838623, 0.7678812415654521 (αhals=0.1 doesn't work)
+
 m = 0.1
 H = Hthals'
-for i in 1:noc
+for i in 1:gtnoc
     @show i#; @show H[i,:][H[i,:].>m]; @show H[i,:][H[i,:].<-m];  @show genename[H[i,:].>m]; @show genename[H[i,:].<-m];
     sindps = sortperm(H[i,:][H[i,:].>m],rev=true); sindps_cut = sindps[1:(min(end,3))]
     sindns = sortperm(H[i,:][H[i,:].<-m]); sindns_cut = sindns[1:(min(end,3))]
@@ -546,18 +577,18 @@ for i in 1:Hdivision
 end
 
 # TSVD
-rttsvd = @elapsed Utsvd, H0tsvd, M0, N0, Wp, Hp, Dtsvd = LCSVD.initpcb(Xr, noc, nac; initmethod=:tsvd, svdmethod=:tsvd)
+rttsvd = @elapsed Utsvd, H0tsvd, M0, N0, Wp, Hp, Dtsvd = LCSVD.initpcb(Xr, gtnoc, nac; initmethod=:tsvd, svdmethod=:tsvd)
 Vtsvd = copy(H0tsvd')
 LCSVD.normalizeW!(Utsvd,Vtsvd)
 Wtsvd, Httsvd = Array(Vtsvd), Utsvd
 # save(joinpath(subworkpath,dataset,"Result_tsvd.jld2"),"Xr",Xr, "cell_type_label", label, "Wtsvd", Wtsvd, "Httsvd", Httsvd)
 
-save(joinpath(subworkpath,dataset,"$(dataset)_Result_sp.jld2"),
+save(joinpath(subworkpath,dataset,"$(dataset)_Result_sp.jld2"), "gtnoc", gtnoc,
     "Wisvd", Wisvd, "Htisvd", Htisvd, "rtisvd", rtisvd,
     "Wtsvd", Wtsvd, "Httsvd", Httsvd, "rttsvd", rttsvd,
-    "Wpcb", Wpcb, "Htpcb", Htpcb, "rtpcb", rtpcb,
+    "Wpcb", Wpcb, "Htpcb", Htpcb, "rtpcb", rtpcb, "α", α, "β", β,
     "Wsma", Wsma, "Htsma", Htsma, "rtirlba", rtirlba, "rtsma", rtsma,
-    "Whals", Whals, "Hthals", Hthals, "rtnndsvd", rtnndsvd, "rthals", rthals)
+    "Whals", Whals, "Hthals", Hthals, "rtnndsvd", rtnndsvd, "rthals", rthals, "αhals", αhals)
 
 #==================== examine rnaSeq data ================================#
 dd = load(joinpath(subworkpath,"Xr.jld2"))

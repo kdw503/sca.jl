@@ -19,146 +19,35 @@ version = "20230630"
 manifest = awsmanifest(version)
 
 using FileIO, IncrementalSVD
-feature_name = "WMB-10Xv2-HY" # WMB-10Xv2-HY(100562×32285)s
+feature_name = "WMB-10Xv2-HY" # WMB-10Xv2-HY(cell 100562 × gene 32285)
 file_name = feature_name*"-log2"
 X = load(joinpath(datapath,"AllenBrain","expression_matrices","WMB-10Xv2","20230630","$(file_name).h5ad")).X
-
-#====== Save data as NRRD memory mapped file and read it =============#
-using AxisArrays, NRRD
-
-# Write whole WMB-10XV3 datasets
-sizexs = []; sizey = 32285
-download_base = joinpath(datapath,"AllenBrain")
-fgpath = joinpath(datapath,"AllenBrain","expression_matrices","WMB-10Xv3")
-expression_matrices = manifest.file_listing["WMB-10Xv3"]["expression_matrices"]
-open(joinpath(fgpath,"WMB-10Xv3-log2.nrrd"),"w") do io   # write data
-    for fm_label in ["WMB-10Xv3-CB","WMB-10Xv3-CTXsp","WMB-10Xv3-HPF","WMB-10Xv3-HY"
-                    ,"WMB-10Xv3-Isocortex-1","WMB-10Xv3-Isocortex-2","WMB-10Xv3-MB","WMB-10Xv3-MY"
-                    ,"WMB-10Xv3-OLF","WMB-10Xv3-P","WMB-10Xv3-PAL","WMB-10Xv3-STR", "WMB-10Xv3-TH"
-                    ]
-        feature_matrix_label = fm_label; scale="log2"
-        rpath = expression_matrices[feature_matrix_label][scale]["files"]["h5ad"]["relative_path"]
-        local_path = joinpath(download_base, split(rpath,"/")... )
-        AllenBrain.download_dir(manifest, rpath, local_path)
-        # Load .h5ad file
-        adata = load(local_path)
-        X = sqrt.(adata.X')
-        sizey = size(X,1)
-        push!(sizexs,size(X,2))
-        write(io,X)
-    end
-end
-
-axy = AxisArrays.Axis{:y}(1:sizey)
-axx = AxisArrays.Axis{:x}(1:sum(sizexs))
-header = NRRD.headerinfo(Float32, (axy, axx))
-header["datafile"] = "WMB-10Xv3-log2.nrrd"
-open(joinpath(fgpath,"WMB-10Xv3-log2.nhdr"),"w") do io # write header
-    write(io,magic(format"NRRD"))
-    NRRD.write_header(io,"0004",header)
-end
-
-# write single Gene expression Matrix
-# read from site
-feature_name = "WMB-10Xv2-HY"; scale="log2"
-feature_group = first(feature_name,9)
-download_base = joinpath(datapath,"AllenBrain")
-expression_matrices = manifest.file_listing[feature_group]["expression_matrices"]
-rpath = expression_matrices[feature_name][scale]["files"]["h5ad"]["relative_path"]
-local_path = joinpath(download_base, split(rpath,"/")... )
-AllenBrain.download_dir(manifest, rpath, local_path) # download from site
-adata = load(local_path) # Load .h5ad file
-Xgc = sqrt.(adata.X')
-sizey, sizex = size(Xcg)
-# write data
-fgpath = joinpath(download_base,"expression_matrices",feature_group)
-fprex = "$(feature_name)-$(scale)"
-dfname = fprex*".nrrd"
-open(joinpath(fgpath,dfname),"w") do io
-    write(io,Xgc)
-end
-# write header
-axy = AxisArrays.Axis{:y}(1:sizey)
-axx = AxisArrays.Axis{:x}(1:sizex)
-header = NRRD.headerinfo(Float32, (axy, axx))
-header["datafile"] = dfname
-hfname = fprex*".nhdr"
-open(joinpath(fgpath,hfname),"w") do io
-    write(io,magic(format"NRRD"))
-    NRRD.write_header(io,"0004",header)
-end
-
-#========= load data from NRRD file as memory mapped array ======#
-feature_name = "WMB-10Xv3"; scale="raw" # WMB-10Xv3(32285×2349544)
-feature_group = first(feature_name,9)
-fgpath = joinpath(datapath,"AllenBrain","expression_matrices",feature_group)
-file_name = feature_name*"-raw"
-X = load(joinpath(fgpath,file_name*".nhdr")).data
-
-feature_name = "WMB-10Xv3-CB"; scale="raw" # WMB-10Xv3(32285×182026)
-feature_group = first(feature_name,9)
-fgpath = joinpath(datapath,"AllenBrain","expression_matrices",feature_group)
-file_name = feature_name*"-raw"
-X = load(joinpath(fgpath,file_name*".nhdr")).data
-
-feature_name = "WMB-10Xv2-HY"; scale="log2" # WMB-10Xv2-HY(32285×100562)
-feature_group = first(feature_name,9)
-fgpath = joinpath(datapath,"AllenBrain","expression_matrices",feature_group)
-file_name = feature_name*"-log2"
-Xgc = load(joinpath(fgpath,file_name*".nhdr")).data
 
 #========== PCB ===============#
 # Initialization
 noc = 500 # number of component
-nac = 3500 # number of additional component
+nac = 0 # number of additional component
 
-initmethod = :isvd; initstr = initmethod
+initmethod = :isvd; svdmethod=:isvd; initstr = initmethod
 fname = joinpath(subworkpath,"$(file_name)_$(initmethod)_noc$(noc)_nac$(nac).jld2")
 
 if !isfile(fname)
     println("calculating init.")
-    rt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, noc, nac; initmethod=initmethod, svdmethod=:isvd)
+    rt1 = @elapsed U, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(Xr', noc, nac; initmethod=initmethod, svdmethod=svdmethod)
     save(fname, "W0",W0,"H0",H0,"Wp",Wp,"Hp",Hp,"M0",M0,"N0",N0,"D",D,"rt1",rt1)
 else
     dd = load(fname)
     W0, H0, M0, N0, Wp, Hp, D, rt1 = dd["W0"], dd["H0"], dd["M0"], dd["N0"], dd["Wp"], dd["Hp"], dd["D"], dd["rt1"]
 end
-
-if init_hals
-    jldfprex = "WMB-10Xv2-HY-raw_hals_noc500_a0.1_mit50"
-    dd = load(joinpath(subworkpath,"$(jldfprex).jld2"))
-    Wp, Hp, iter, rtnnd, rt2, fitval = dd["W"], dd["H"], dd["iter"], dd["rt1"], dd["rt2"], dd["fitval"]
-    LCSVD.balanceWH!(Wp,Hp)
-    M0, N0 = (W0'Wp, Hp*H0')
-    W, H = W0*M0, N0*H0
-    initstr = "inithals"
-    fname = joinpath(subworkpath,"$(file_name)_$(initstr)_noc$(noc)_nac$(nac).jld2")
-    save(fname, "W0",W0,"H0",H0,"Wp",Wp,"Hp",Hp,"W",W,"H",H,"M0",M0,"N0",N0,"D",D,"rt1",rt1)
-end
-if init_sbc
-    fname = joinpath(subworkpath,"WMB-10Xv2-HY-raw_initsbc_noc500_nac0_Wspar.jld2")
-    if !isfile(fname)
-        rt11 = @elapsed M0 = sbc(W0)
-        rt12 = @elapsed N0 = M0\D
-        rt13 = @elapsed LCSVD.balanceWH!(M0, N0)
-        rt1 = rt11+rt12+rt12
-        # rt11 = @elapsed N0 = sbc(H0')' # this fail to converge
-        # rt12 = @elapsed M0 = D/N0
-        # rt13 = @elapsed LCSVD.balanceWH!(M0, N0)
-        # rt1 = rt11+rt12+rt12
-        Wp = W0*M0; Hp = N0*H0
-        save(fname, "W0",W0,"H0",H0,"Wp",Wp,"Hp",Hp,"M0",M0,"N0",N0,"D",D,"rt1",rt1)
-    else
-        dd = load(fname)
-        W0, H0, M0, N0, Wp, Hp, D, rt1 = dd["W0"], dd["H0"], dd["M0"], dd["N0"], dd["Wp"], dd["Hp"], dd["D"], dd["rt1"]
-    end
-    initstr = "initsbc"
-end
+initmethod=:tsvd
+#initmethod=:svd; svdmethod=:svd
+rtisvd = @elapsed U, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(Xr', gtnoc, nac; initmethod=initmethod, svdmethod=svdmethod)
+V = copy(H0'); N0t = copy(N0')
 
 # PCB solve!
-α1 = 0.005; α2 = 0.005  # H sparsity
-β1 = 5.0; β2 = 5.0 # W nonnegativity
-σ0=std(W0*M0); r=0.3; maxiter = Int(ceil(log(eps(eltype(X)))/log(r))); tol=0 
+α1 = 0.005; α2 = 0.005
+β1 = 0; β2 = 0
+r=0.3; maxiter = Int(ceil(log(eps(eltype(X)))/log(r))); tol=0 
 
 alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, σ0=σ0, r=r, useprecond=false, uselv=false,
     maxiter = maxiter, store_trace = true, store_inner_trace = false, show_trace = true,

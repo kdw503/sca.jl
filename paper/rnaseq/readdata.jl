@@ -9,13 +9,13 @@ elseif Sys.isunix()
 end
 cd(workpath); Pkg.activate(".")
 
-using AllenBrain, FileIO
+using AllenBrain, FileIO, Muon
 
-version = "20231215"
+version = "20230630"
 manifest = awsmanifest(version)
 
 
-# WMB-10XV2 Gene expression matrices
+# WMB-10XV2 Gene expression matrices (data version : 20230630)
 expression_matrices = manifest.file_listing["WMB-10Xv2"]["expression_matrices"]
 feature_matrix_label = "WMB-10Xv2-HY" # "WMB-10Xv2-TH"(131212×32285)
 rpath = expression_matrices[feature_matrix_label]["raw"]["files"]["h5ad"]["relative_path"]
@@ -23,7 +23,7 @@ download_base = joinpath(datapath,"AllenBrain")
 local_path = joinpath(download_base, split(rpath,"/")... )
 AllenBrain.download_dir(manifest, rpath, local_path)
 # Load .h5ad file
-adata = load(local_path) # Muon v0.2.0(master) only works. This means 'add Muon' doesn'w work, we need to 'dev Muon'. 
+adata = load(local_path)
 adata.X # cells(131212,adata.obs_names) by genes(32285, adata.var_names)
 
 # WMB-10XV3 Gene expression matrices
@@ -38,9 +38,43 @@ AllenBrain.download_dir(manifest, rpath, local_path)
 adata = load(local_path)
 adata.x
 
+# WMB-10X annotation data
+using CSVFiles, CSV, DataFrames
+rpath = manifest.file_listing["WMB-10X"]["metadata"]["cell_metadata_with_cluster_annotation"]["files"]["csv"]["relative_path"]
+download_base = joinpath(datapath,"AllenBrain")
+local_path = joinpath(download_base, split(rpath,"/")... )
+AllenBrain.download_dir(manifest, rpath, local_path)
+ldata = CSV.read(local_path, DataFrame)
+# choose only for WMB-10Xv2-HY (version : "20231215")
+ldata.cell_label # cell_label in cell annotation data
+adata.obs_names # cell_label in gene expression data
+i = 0
+for cl in adata.obs_names
+    if cl in ldata.cell_label
+        i += 1
+        idx = findfirst(s->s==cl,ldata.cell_label)
+        @show i, ldata.feature_matrix_label[idx], ldata.cell_label[idx], ldata.cluster_alias[idx]
+    else
+        @show i, cl
+    end
+end
+# choose only for WMB-10Xv2-HY (version : "20230630" no 'feature_matrix_label' field)
+ldata.cell_label # cell_label in cell annotation data
+adata.obs_names # cell_label in gene expression data
+i = 0
+for cl in adata.obs_names
+    if cl in ldata.cell_label
+        i += 1
+        idx = findfirst(s->s==cl,ldata.cell_label)
+#        @show i, ldata.library_method[idx], ldata.anatomical_division_label[idx], ldata.cell_label[idx], ldata.cluster_alias[idx]
+    else
+        @show i, cl
+    end
+end
+
+ldata.anatomical_division_label[ ldata.anatomical_division_label.=="HY" .&& ldata.library_method .== "10Xv2"]
 
 
-TSVD.jl
 
 open(IOSTREAM,,,) begin
     read_chunk(from_file)
@@ -49,9 +83,6 @@ end
 
 fp = open(file)
 X = mmap(fp)
-
-
-
 
 using AWS: @service
 @service S3
@@ -113,7 +144,8 @@ manifest.file_listing["Allen-CCF-2020"]["image_volumes"]["annotation_10"]["files
 manifest.file_listing["Allen-CCF-2020"]["image_volumes"]["average_template_10"]["files"]["nii.gz"]["relative_path"]
 
 
-
+# annotation data
+manifest.file_listing["WMB-10X"]["metadata"]["gene"]["files"]["csv"]["relative_path"]
 
 
 # 10x RNA-seq gene expression data

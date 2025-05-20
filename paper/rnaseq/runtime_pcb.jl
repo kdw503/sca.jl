@@ -14,17 +14,18 @@ include(joinpath(workpath,"setup_light.jl"))
 include(joinpath(workpath,"setup_plot.jl"))
 include(joinpath(workpath,"utils.jl"))
 
+# ARGS = ["\"WMB-10Xv2-HY\"", "0", "500","0.005","0.005","0.","0.","0"]
 feature_name = eval(Meta.parse(ARGS[1]))
 ncells = eval(Meta.parse(ARGS[2]))
 noc = eval(Meta.parse(ARGS[3]))
-nac = eval(Meta.parse(ARGS[4]))
-α1 = eval(Meta.parse(ARGS[5]));
-α2 = eval(Meta.parse(ARGS[6]));
-β1 = eval(Meta.parse(ARGS[7]));
-β2 = eval(Meta.parse(ARGS[8]));
-pcb_maxiter = eval(Meta.parse(ARGS[9]));
+nac = 0 # eval(Meta.parse(ARGS[4]))
+α1 = eval(Meta.parse(ARGS[4]));
+α2 = eval(Meta.parse(ARGS[5]));
+β1 = eval(Meta.parse(ARGS[6]));
+β2 = eval(Meta.parse(ARGS[7]));
+pcb_maxiter = eval(Meta.parse(ARGS[8]));
 
-@show feature_name, ncells, noc, nac, α1, α2, β1, β2, pcb_maxiter
+@show feature_name, ncells, noc, α1, α2, β1, β2, pcb_maxiter
 
 nc = noc+nac
 memsize = Int(Sys.total_memory())/1e9
@@ -34,59 +35,45 @@ memsize = Int(Sys.total_memory())/1e9
 using NRRD
 feature_group=first(feature_name,9)
 fgpath = joinpath(datapath,"AllenBrain","expression_matrices",feature_group)
-file_name = feature_name*"-raw"
-Xraw = load(joinpath(fgpath,file_name*".nhdr")).data
-m,nraw = size(Xraw)
+file_name = feature_name*"-log2"
+Xgcraw = load(joinpath(fgpath,file_name*".nhdr")).data
+m,nraw = size(Xgcraw)
 ncells = ncells == 0 ? nraw : (file_name*="_n$(ncells)"; ncells); @show ncells; flush(stdout)
 ncells > nraw && error("ncells must be smaller than $(nraw)")
-X = view(Xraw,:,1:ncells); n=ncells
+X = view(Xgcraw,:,1:ncells); n=ncells
 
 # LCSVD
 method = "pcb"
 @show method; flush(stdout)
 
 initmethod = :isvd; initmtdstr="init$(initmethod)"
-fname = joinpath(subworkpath,"$(file_name)_$(initmtdstr)_noc$(noc)_nac$(nac)_X.jld2")
+fname = joinpath(subworkpath,"$(file_name)_$(initmtdstr)_noc$(noc)_X.jld2")
 if isfile(fname)
     @show "Reading initfile..."
     dd = load(fname)
-    W0, H0t, M0, N0t, D, rt1 = dd["W0"], copy(dd["H0"]'), dd["M0"], copy(dd["N0"]'), dd["D"], dd["rt1"]
-    # H0, W0, N0, M0, Hp, Wp, D, rt1 = dd["W0"]', dd["H0"]', dd["M0"]', dd["N0"]', dd["Wp"]', dd["Hp"]', dd["D"]', dd["rt1"]
+    U, V, M0, N0t, D, rt1 = dd["U"], copy(dd["V"]), dd["M0"], copy(dd["N0t"]), dd["D"], dd["rt1"]
     # noc = 500, norm(X-W0*M0*N0*H0) = 15375.242f0
 else
-    fn = joinpath(subworkpath,"$(file_name)_isvd_nc$(nc).jld2")
-    if isfile(fn)
-        @show "Reading isvd..."
-        dd = load(fn)
-        U, s, Vt, rt0, memsize0 = dd["U"], dd["s"], dd["Vt"], dd["rt0"], dd["memsize"]
-    else
-        @show "Calculating isvd..."
-        rt0 = @elapsed ((U, s) = isvd(X, nc); Vt = Array(Diagonal(s.^-1)*(U'*X))) # Vt = Array((pinv(U*Diagonal(s))*X))
-        save(fn, "U",U,"s",s,"Vt",Vt,"rt0",rt0, "memsize", memsize)
-    end
-    rt1 = @elapsed begin 
-                        W0 = U; H0 = Vt
-                        D = Diagonal(s); D2 = Diagonal(sqrt.(s[1:noc])); T = eltype(W0)
-                        M0 = Matrix{T}(undef,nc,noc); M0[1:noc,:].=D2; M0[noc+1:end,:].=zero(T)
-                        N0 = Matrix{T}(undef,noc,nc); N0[:,1:noc].=D2; M0[:,noc+1:end].=zero(T)
-                    end
-    rt1 += rt0
+    rt1 = @elapsed U, Vt, M0, N0, Wp, Hp, D = LCSVD.initpcb(X, noc, nac; initmethod=initmethod, svdmethod=:isvd)
+    V = copy(Vt'); N0t = copy(N0')
 #    rt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, noc, nac; initmethod=initmethod, svdmethod=:isvd)
-    save(fname, "W0",W0,"H0",H0,"M0",M0,"N0",N0,"D",D,"rt1",rt1, "memsize", memsize)
-    H0t, N0t = copy(dd["H0"]'), copy(dd["N0"]')
+    save(fname, "U", U, "V", V,"M0",M0,"N0t",N0t,"D",D,"rt1",rt1, "memsize", memsize)
 end
 
 @show "solve"
-useprecond=false; uselv=false; tol=1e-6
-r=0.3; maxiter = pcb_maxiter == 0 ? Int(ceil(log(eps(eltype(X)))/log(r))) : pcb_maxiter
-inner_tol = 1e-6; inner_maxiter = 100#Int(ceil(2.5*ncells+350))
-alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, r=r, useprecond=useprecond,
-    denoisefilter=:avg, uselv=false, maxiter = maxiter, store_trace = false,
-    store_inner_trace = false, show_trace = true, allow_f_increases = true,
-    store_sparsity_nneg=true, f_abstol=0, f_reltol=0, f_inctol=1e2, x_abstol=0, x_reltol=tol, successive_f_converge=0,
-    inner_tol = inner_tol, inner_maxiter = inner_maxiter)
+β1vec = fill(β1,noc); β2vec = fill(β2,noc); β1vec[1] = 0.; β2vec[1] = 0.
+α1vec = fill(α1,noc); α2vec = fill(α2,noc); α1vec[1] = 0.; α2vec[1] = 0.
+r=0.3; useprecond=false; uselv=false; tol=1e-6
+maxiter = pcb_maxiter == 0 ? Int(ceil(log(eps(eltype(X)))/log(r))) : pcb_maxiter
+inner_tol = 1e-6; inner_maxiter = 1000#Int(ceil(2.5*ncs+350))# Int(ceil(0.75*ncs+100)) # 
+alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2,
+    #α1vec=α1vec, α2vec=α2vec, β1vec=β1vec, β2vec=β2vec,
+    r=r, useprecond=useprecond, usedenoiseW0H0=false,
+    denoisefilter=:avg, uselv=false, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = false,
+    store_inner_trace = false, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
+    f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0);
 M, Nt = copy(M0), copy(N0t)
-rt2 = @elapsed rst0 = LCSVD.solve!(alg, X, W0, H0t, D, M, Nt);
+rt2 = @elapsed rst0 = LCSVD.solve!(alg, X, U, V, D, M, Nt);
 W, H = rst0.W, rst0.Ht'; iter = rst0.niters
 # avgfit, ml, merrval, rerrs = SCA.matchedfitval(gtW, gtH, W1, H1; clamp=false)
 # LCSVD.normalizeW!(W,H); 
