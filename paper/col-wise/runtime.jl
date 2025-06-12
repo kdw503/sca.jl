@@ -317,6 +317,3 @@ gradEnh(N) = (H = N*H0; H[H.>0.].=0.; 2.0*Bh*H*H0'*norm(M0)^2)
 gEnh = gradEnh(N0)
 norm(fdgradEh1 - gEnh)
 
-
-prepare_fg_colwise_params2
-

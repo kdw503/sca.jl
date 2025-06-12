@@ -36,7 +36,6 @@ function greek()
     println("Φ ϕ φ: \\Phi \\phi \\varphi,       X χ: X \\chi,                       Ψ ψ: \\psi,     Ω ω: \\omega")
 end
 
-
 function mkimgUM(U,M,imgsz)
     ncells = size(U,2)
     UM = U*M

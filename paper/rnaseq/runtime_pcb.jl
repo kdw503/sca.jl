@@ -8,22 +8,24 @@ elseif Sys.isunix()
     datapath=ENV["MYSTORAGE"]*"/work/Data"
 end
 cd(workpath); Pkg.activate(".")
-subworkpath = joinpath(workpath,"paper","rnaseq")
+allenbrainversion = "20241130"
+subworkpath = joinpath(workpath,"paper","rnaseq",allenbrainversion)
 
 include(joinpath(workpath,"setup_light.jl"))
 include(joinpath(workpath,"setup_plot.jl"))
 include(joinpath(workpath,"utils.jl"))
 
-# ARGS = ["\"WMB-10Xv2-HY\"", "0", "500","0.005","0.005","0.","0.","0"]
+# ARGS = ["\"WMB-10Xv2-HY\"", "\"log2\"", "0", "500","0.005","0.005","0.","0.","0"]
 feature_name = eval(Meta.parse(ARGS[1]))
-ncells = eval(Meta.parse(ARGS[2]))
-noc = eval(Meta.parse(ARGS[3]))
+pp = eval(Meta.parse(ARGS[2]))
+ncells = eval(Meta.parse(ARGS[3]))
+noc = eval(Meta.parse(ARGS[4]))
 nac = 0 # eval(Meta.parse(ARGS[4]))
-α1 = eval(Meta.parse(ARGS[4]));
-α2 = eval(Meta.parse(ARGS[5]));
-β1 = eval(Meta.parse(ARGS[6]));
-β2 = eval(Meta.parse(ARGS[7]));
-pcb_maxiter = eval(Meta.parse(ARGS[8]));
+α1 = eval(Meta.parse(ARGS[5]));
+α2 = eval(Meta.parse(ARGS[6]));
+β1 = eval(Meta.parse(ARGS[7]));
+β2 = eval(Meta.parse(ARGS[8]));
+pcb_maxiter = eval(Meta.parse(ARGS[9]));
 
 @show feature_name, ncells, noc, α1, α2, β1, β2, pcb_maxiter
 
@@ -35,14 +37,15 @@ memsize = Int(Sys.total_memory())/1e9
 using NRRD
 feature_group=first(feature_name,9)
 fgpath = joinpath(datapath,"AllenBrain","expression_matrices",feature_group)
-file_name = feature_name*"-log2"
+file_name = feature_name*"-"*pp
 Xgcraw = load(joinpath(fgpath,file_name*".nhdr")).data
 m,nraw = size(Xgcraw)
 ncells = ncells == 0 ? nraw : (file_name*="_n$(ncells)"; ncells); @show ncells; flush(stdout)
 ncells > nraw && error("ncells must be smaller than $(nraw)")
-X = view(Xgcraw,:,1:ncells); n=ncells
+X = pp == "raw" ? sqrt.(Xgcraw[:,1:ncells]) : view(Xgcraw,:,1:ncells)
+n=ncells
 
-# LCSVD
+# PCB
 method = "pcb"
 @show method; flush(stdout)
 
@@ -76,7 +79,7 @@ M, Nt = copy(M0), copy(N0t)
 rt2 = @elapsed rst0 = LCSVD.solve!(alg, X, U, V, D, M, Nt);
 W, H = rst0.W, rst0.Ht'; iter = rst0.niters
 # avgfit, ml, merrval, rerrs = SCA.matchedfitval(gtW, gtH, W1, H1; clamp=false)
-# LCSVD.normalizeW!(W,H); 
+LCSVD.normalizeW!(W,H)
 fitval = LCSVD.fitd(X,W*H)
 jldfprex = "$(file_name)_$(initmtdstr)_$(method)_noc$(noc)_nac$(nac)_aw$(α1)_ah$(α2)_bw$(β1)_bh$(β2)_tol$(tol)_it$(iter)"
 fname = joinpath(subworkpath,"$(jldfprex).jld2")
@@ -103,7 +106,7 @@ for i in 1:min(2,num_blocks) # som many blocks, so now just plot the first twos.
     hm1 = heatmap!(ax, W[rows,:]', colormap = mycmap, colorrange = joint_limits)
     hidedecorations!(ax)
     Colorbar(f[:, end+1], hm1)
-    save(joinpath(subworkpath,"$(jldfprex)_W$(i)_sw$(sw).png"),f)
+    save(joinpath(subworkpath,"$(jldfprex)_W$(i)_sw$(sw)2.png"),f)
 end
 # H heatmap
 y,x = size(H); num_blocks = x÷1000+1; ysize = y + 20; xsize = x÷num_blocks + 100
@@ -118,5 +121,5 @@ for i in 1:min(2,num_blocks)
     hm1 = heatmap!(ax, H[rows,cols]', colormap = mycmap, colorrange = joint_limits)
     hidedecorations!(ax)
     Colorbar(f[:, end+1], hm1)
-    save(joinpath(subworkpath,"$(jldfprex)_H$(i)_sh$(sh)_fv$(fitval).png"),f)
+    save(joinpath(subworkpath,"$(jldfprex)_H$(i)_sh$(sh)_fv$(fitval)2.png"),f)
 end

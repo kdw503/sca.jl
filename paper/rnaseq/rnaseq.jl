@@ -69,7 +69,6 @@ local_path = joinpath(download_base, split(rpath,"/")... )
 AllenBrain.download_dir(manifest, rpath, local_path) # download from site
 adata = load(local_path) # Load .h5ad file
 Xgc = sqrt.(adata.X')
-sizey, sizex = size(Xcg)
 # write data
 fgpath = joinpath(download_base,"expression_matrices",feature_group)
 fprex = "$(feature_name)-$(scale)"
@@ -78,6 +77,7 @@ open(joinpath(fgpath,dfname),"w") do io
     write(io,Xgc)
 end
 # write header
+sizey, sizex = size(Xgc)
 axy = AxisArrays.Axis{:y}(1:sizey)
 axx = AxisArrays.Axis{:x}(1:sizex)
 header = NRRD.headerinfo(Float32, (axy, axx))

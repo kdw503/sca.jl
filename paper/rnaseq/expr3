@@ -1,14 +1,13 @@
 #!/bin/bash
+# if you met "/bin/bash^M: bad interpreter: No such file or directory" error,
+# Open your script in VS Code > ctrl+shift+p > type "Change End of Line Sequence" > select "LF"
+
 # export resource='select[model==Intel_Xeon_Gold6242CPU280GHz && mem>64000 && tmp>2] rusage[mem=64000, tmp=2]'
 # smjuliajob -R "$resource" $MYSTORAGE/work/julia/sca/paper/rnaseq/expr1
 # julia         file             dir_name methods num_expriments SNR factor ncells lcsvd_maxiter hals_maxiter hals_α compnmf_maxiter
 
-# export jlexec=/usr/local/julia/bin/julia
-# export jlfile=$MYSTORAGE/work/julia/sca/paper/rnaseq/runtime_compnmf.jl
-# lscpu >> $MYSTORAGE/work/julia/sca/paper/rnaseq/compnmf_machine.txt
-# $jlexec $jlfile 3 2
 export jlexec=/usr/local/julia/bin/julia
-# export jlfile=$MYSTORAGE/work/julia/sca/paper/rnaseq/runtime.jl
-# $jlexec $jlfile 2 0 1000 100
-export jlfile=$MYSTORAGE/work/julia/sca/paper/rnaseq/runtime_small_pcb_alpha_both.jl
-$jlexec $jlfile 20 0 1000 1e-6 false 0.0001:0.0005:0.01
+export jlfile=$MYSTORAGE/work/julia/sca/paper/rnaseq/rs_bsclustering.jl
+#   mf_method
+$jlexec $jlfile \"WMB-10Xv2-HY\" \"log2\" :pcb_sp_nn 0.00001 50
+$jlexec $jlfile \"WMB-10Xv2-HY\" \"log2\" :pcb_sp 0.00001 50

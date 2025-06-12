@@ -144,8 +144,8 @@ noc = ncs; nac = 0
 
 rt1 = @elapsed U, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(X, noc, nac; initmethod=initmethod, svdmethod=:isvd)
 V = copy(H0'); N0t = copy(N0')
-for α in [1e-3, 1e-4]
-β1 = β2= β; α1 = α; α2 = 0.005 # sparse coding
+for α in [0.]
+β1 = β2= β; α1 = 0.005; α2 = α # sparse coding
 β1vec = fill(β1,noc); β2vec = fill(β2,noc); β1vec[1] = 0.; β2vec[1] = 0.
 α1vec = fill(α1,noc); α2vec = fill(α2,noc); α1vec[1] = 0.; α2vec[1] = 0.
 r=0.3; useprecond=false; uselv=false; tol=1e-6
