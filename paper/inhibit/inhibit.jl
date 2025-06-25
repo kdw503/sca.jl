@@ -16,11 +16,11 @@ include(joinpath(workpath,"utils.jl"))
 
 using LCSVD, CompNMF
 
-dataset = :fakecells; SNR=10; inhibitindices=[1,2,3]; bias=0.1
+dataset = :fakecells; SNR=0; inhibitindices=[1,2,3]; bias=0.1
 filter = dataset ∈ [:neurofinder,:fakecells] ? :meanT : :none; filterstr = "_$(filter)"
 datastr = dataset == :fakecells ? "_fc$(inhibitindices)_$(SNR)dB" : "_$(dataset)"
 
-lcsvd_maxiter = 150
+pcb_maxiter = 150
 compnmf_maxiter = 1000
 hals_maxiter = 150
 
@@ -53,10 +53,10 @@ for subtract_bg in [false, true]
     end
 
 # LCSVD
-prefix = "lcsvd"
+prefix = "PCB"
 @show prefix; flush(stdout)
 
-mfmethod = :LCSVD; useprecond=false; uselv=false; s=10; maxiter = lcsvd_maxiter; tol=-1 
+mfmethod = :PCB; useprecond=false; uselv=false; s=10; maxiter = pcb_maxiter; tol=-1
 r=(0.3)^1 #0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
       # if this is too big iteration number would be increased
 
@@ -138,23 +138,22 @@ imsave_data(dataset,fname,Wcn,Hcn,imgsz,100; saveH=false)
 # plotH_data(fname*"_Hinhibit",Hcn[inhibitindices,:]; space=0.,ylabel="",ytickformat="{:.2f}")
 plotH_data(fname*"_H",Hcn[1:8,:]; space=0.,ylabel="",ytickformat="{:.2f}")
 
-
-# result for 1 inhibit cell
-imggt = mkimgW(gtW,imgsz); imglc = mkimgW(Wlc,imgsz); imgcn = mkimgW(Wcn,imgsz); imghals = mkimgW(Whals,imgsz)
-# scainhibitindices = (bias == 0.5) && (subtract_bg == false) ? 8 : inhibitindices
-hdata = [gtH[:,inhibitindices[1]],Hlc[inhibitindices[1],:],Hcn[inhibitindices[1],:],Hhals[inhibitindices[1],:]] # Hlc inhibit index setting for plot
-labels = ["Ground Truth","LCSVD","Compressed NMF","HALS NMF"]
-f = Figure(resolution = (1000,400))
-ax11=AMakie.Axis(f[1,1],title=labels[1], aspect = DataAspect()); hidedecorations!(ax11)
-ax21=AMakie.Axis(f[2,1],title=labels[2], aspect = DataAspect()); hidedecorations!(ax21)
-ax31=AMakie.Axis(f[3,1],title=labels[3], aspect = DataAspect()); hidedecorations!(ax31)
-ax41=AMakie.Axis(f[4,1],title=labels[4], aspect = DataAspect()); hidedecorations!(ax41)
-axall2=AMakie.Axis(f[:,2],title="Inhibited H component",xlabel="time index")
-image!(ax11, rotr90(imggt)); image!(ax21, rotr90(imglc)); image!(ax31, rotr90(imgcn)); image!(ax41, rotr90(imghals))
-colorindices=[1,2,7,5]
-lin = [lines!(axall2,hd,color=mtdcolors[colorindices[i]]) for (i,hd) in enumerate(hdata)]
-f[:,3] = Legend(f[:,2],lin,labels)
-save(joinpath(subworkpath,"idx$(inhibitindices[1])_bias$(bias)_$(sbgstr).png"),f)
+# # result for 1 inhibit cell
+# imggt = mkimgW(gtW,imgsz); imglc = mkimgW(Wlc,imgsz); imgcn = mkimgW(Wcn,imgsz); imghals = mkimgW(Whals,imgsz)
+# # scainhibitindices = (bias == 0.5) && (subtract_bg == false) ? 8 : inhibitindices
+# hdata = [gtH[:,inhibitindices[1]],Hlc[inhibitindices[1],:],Hcn[inhibitindices[1],:],Hhals[inhibitindices[1],:]] # Hlc inhibit index setting for plot
+# labels = ["Ground Truth","PCB","Compressed NMF","HALS NMF"]
+# f = Figure(resolution = (1000,400))
+# ax11=AMakie.Axis(f[1,1],title=labels[1], aspect = DataAspect()); hidedecorations!(ax11)
+# ax21=AMakie.Axis(f[2,1],title=labels[2], aspect = DataAspect()); hidedecorations!(ax21)
+# ax31=AMakie.Axis(f[3,1],title=labels[3], aspect = DataAspect()); hidedecorations!(ax31)
+# ax41=AMakie.Axis(f[4,1],title=labels[4], aspect = DataAspect()); hidedecorations!(ax41)
+# axall2=AMakie.Axis(f[:,2],title="Inhibited H component",xlabel="time index")
+# image!(ax11, rotr90(imggt)); image!(ax21, rotr90(imglc)); image!(ax31, rotr90(imgcn)); image!(ax41, rotr90(imghals))
+# colorindices=[1,2,7,5]
+# lin = [lines!(axall2,hd,color=mtdcolors[colorindices[i]]) for (i,hd) in enumerate(hdata)]
+# f[:,3] = Legend(f[:,2],lin,labels)
+# save(joinpath(subworkpath,"idx$(inhibitindices[1])_bias$(bias)_$(sbgstr).png"),f)
 
 # result for 2 inhibit cells
 if length(inhibitindices) > 1
@@ -168,7 +167,7 @@ if length(inhibitindices) > 1
             [gtH[:,hindices[1]],Hlc[hindices[1],:],Hcn[hindices[1],:],Hhals[hindices[1],:]] # Hlc inhibit index setting for plot
     hdata2 = #=subtract_bg=# false ? [gtH[:,hindices[2]],Hlc[hindices[2],:]] :
             [gtH[:,hindices[2]],Hlc[hindices[2],:],Hcn[hindices[2],:],Hhals[hindices[2],:]] # Hlc inhibit index setting for plot
-    labels = ["Ground Truth","LCSVD","Compressed NMF","HALS NMF"]
+    labels = ["Ground Truth","PCB","Compressed NMF","HALS NMF"]
     f = Figure(resolution = (1000,400))
     ax11=AMakie.Axis(f[1,1],title=labels[1], aspect = DataAspect()); hidedecorations!(ax11)
     ax21=AMakie.Axis(f[2,1],title=labels[2], aspect = DataAspect()); hidedecorations!(ax21)

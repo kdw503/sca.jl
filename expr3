@@ -5,7 +5,7 @@
 export jlexec=/usr/local/julia/bin/julia
 export jlfile=$MYSTORAGE/work/julia/sca/paper/runtime_all.jl
 #lscpu >> $MYSTORAGE/work/julia/sca/paper/SNR/machine.txt
-$jlexec $jlfile \"size_fast\" [\"pcb\",\"pcb_precon\",\"hals\",\"compnmf\"] 21 30 0 10 15 150 80 0.1 900
+$jlexec $jlfile \"size_fast\" [\"pcb\",\"pcb_precon\",\"hals\",\"compnmf\"] 18 34 0 10 15 150 80 0.1 1000
 
 # export jlfile=$MYSTORAGE/work/julia/sca/paper/runtime_all.jl
 # lscpu >> $MYSTORAGE/work/julia/sca/paper/SNR/machine.txt

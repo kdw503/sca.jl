@@ -46,5 +46,5 @@ else
     error("Unknown mf_method: $mf_method")
 end
 rtclust = @elapsed clustn = cluster_resample(Cell, nresample, pvalue)
-save(joinpath(subworkpath,"$(feature_name_pp)_$(mf_method)_p$(pvalue)_n$(nresample)_bsclass.jld2"), "clustn",clust,"rtclust",rtclust)
+save(joinpath(subworkpath,"$(feature_name_pp)_$(mf_method)_p$(pvalue)_n$(nresample)_bsclass.jld2"), "clustn",clustn,"rtclust",rtclust)
 

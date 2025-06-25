@@ -3,14 +3,14 @@
 # smjuliajob -R "$resource" $MYSTORAGE/work/julia/sca/expr1
 # julia         file             dir_name methods initmethod iterstrt iterstop SNR factor ncells lcsvd_maxiter hals_maxiter hals_α compnmf_maxiter
 export jlexec=/usr/local/julia/bin/julia
-export jlfile=$MYSTORAGE/work/julia/sca/paper/runtime_allwPP.jl
+export jlfile=$MYSTORAGE/work/julia/sca/paper/runtime_all.jl
 #lscpu >> $MYSTORAGE/work/julia/sca/paper/SNR/machine.txt
 # $jlexec $jlfile \"SNR\" [\"pcb_precon\",\"pcb\",\"hals\",\"compnmf\"] 1 50 -10 1 15 500 300 0.1 1300
 # $jlexec $jlfile \"SNR\" [\"pcb\",\"pcb_precon\",\"hals\",\"compnmf\"] 1 50 0 1 15 500 300 0.1 1300
 # $jlexec $jlfile \"SNR\" [\"pcb\",\"pcb_precon\",\"hals\",\"compnmf\"] 1 50 10 1 15 500 300 0.1 1300
 # $jlexec $jlfile \"SNR\" [\"pcb\",\"pcb_precon\",\"hals\",\"compnmf\"] 1 50 20 1 15 500 300 0.1 1300
 # $jlexec $jlfile \"size\" [\"pcb\",\"pcb_precon\",\"hals\",\"compnmf\"] 1 50 0 1 15 500 300 0.1 1300
-$jlexec $jlfile \"SNRwPP\" [\"pcb\",\"pcb_precon\",\"hals\",\"compnmf\"] 31 50 -10 1 15 500 300 0.1 1300
+$jlexec $jlfile \"size_fast\" [\"pcb\",\"pcb_precon\",\"hals\",\"compnmf\"] 1 17 0 10 15 150 80 0.1 1000
 
 # export juliapath=/usr/local/julia/bin/julia
 # export workpath=$MYSTORAGE/work/julia/sca
