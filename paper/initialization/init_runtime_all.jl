@@ -90,17 +90,17 @@ fig = Figure(resolution=(500,280))
 ax1 = AMakie.Axis(fig[1, 1], limits = ((0,100), (-1,25)), xlabel = "number of components", ylabel = "time(sec)")#, title = "Number of components vs. Initialization time")
 
 lin = []
-push!(lin,lines!(ax1, ncellsrng, sca_means, color=mtdcolors[2], label="ISVD"))
-band!(ax1, ncellsrng, sca_lower, sca_upper, color=mtdcoloras[2])
-push!(lin,lines!(ax1, ncellsrng, sca2_means, color=mtdcolors[4], label="IncrementalSVD"))
-band!(ax1, ncellsrng, sca2_lower, sca2_upper, color=mtdcoloras[4])
+# push!(lin,lines!(ax1, ncellsrng, sca_means, color=mtdcolors[4], label="oldISVD"))
+# band!(ax1, ncellsrng, sca_lower, sca_upper, color=mtdcoloras[4])
+push!(lin,lines!(ax1, ncellsrng, sca2_means, color=mtdcolors[2], label="IncrementalSVD")) # IncrementalSVD
+band!(ax1, ncellsrng, sca2_lower, sca2_upper, color=mtdcoloras[2])
 push!(lin,lines!(ax1, ncellsrng, admm_means, color=mtdcolors[5], label="Compression"))
 band!(ax1, ncellsrng, admm_lower, admm_upper, color=mtdcoloras[5])
 push!(lin,lines!(ax1, ncellsrng, hals_means, color=mtdcolors[7], linestyle=:dash, label="NNDSVD(SVD)"))
 band!(ax1, ncellsrng, hals_lower, hals_upper, color=mtdcoloras[7])
 push!(lin,lines!(ax1, ncellsrng, hals_r_means, color=mtdcolors[3], label="NNDSVD(RSVD)"))
 band!(ax1, ncellsrng, hals_r_lower, hals_r_upper, color=mtdcoloras[3])
-labels = ["ISVD","incrementalSVD","Compression","NNDSVD(SVD)","NNDSVD(RSVD)"]
+labels = ["ISVD","Compression","NNDSVD(SVD)","NNDSVD(RSVD)"]
 #axislegend(ax1, labelsize=20, position = :lt) # halign = :left, valign = :top
 fig[:,2] = Legend(fig[:,1],lin,labels)
 save(joinpath(subworkpath,"ncellsrng_vs_rt1s.png"),fig,px_per_unit=2)
@@ -158,24 +158,24 @@ hals_r_means = dd["rnndsvdmeans"]; hals_r_stds = dd["rnndsvdstds"]
 hals_r_upper = hals_r_means + z*hals_r_stds; hals_r_lower = hals_r_means - z*hals_r_stds
 
 fig = Figure(resolution=(500,280))
-ax1 = AMakie.Axis(fig[1, 1], limits=(nothing,(0,10)), xlabel = "data size (MB)", ylabel = "time(sec)",
+ax1 = AMakie.Axis(fig[1, 1], limits=(nothing,(-5,120)), xlabel = "data size (MB)", ylabel = "time(sec)",
     xtickformat = values -> ["$(Int(round(value^2*6.4)))" for value in values]) # factor^2*40*20*1000*64bit(Float64)/8bit/1000000(Mega) MByte
 
 lin = []
-push!(lin,lines!(ax1, factorrng, sca_means, color=mtdcolors[2], label="ISVD"))
-band!(ax1, factorrng, sca_lower, sca_upper, color=mtdcoloras[2])
-push!(lin,lines!(ax1, factorrng, sca2_means, color=mtdcolors[4], label="IncrementalSVD"))
-band!(ax1, factorrng, sca2_lower, sca2_upper, color=mtdcoloras[4])
+# push!(lin,lines!(ax1, factorrng, sca_means, color=mtdcolors[4], label="ISVD")) # old ISVD
+# band!(ax1, factorrng, sca_lower, sca_upper, color=mtdcoloras[4])
+push!(lin,lines!(ax1, factorrng, sca2_means, color=mtdcolors[2], label="ISVD")) # IncrementalSVD
+band!(ax1, factorrng, sca2_lower, sca2_upper, color=mtdcoloras[2])
 push!(lin,lines!(ax1, factorrng, admm_means, color=mtdcolors[5], label="Compression"))
 band!(ax1, factorrng, admm_lower, admm_upper, color=mtdcoloras[5])
 push!(lin,lines!(ax1, factorrng, hals_means, linestyle=:dash, color=mtdcolors[7], label="NNDSVD(SVD)"))
 band!(ax1, factorrng, hals_lower, hals_upper, color=mtdcoloras[7])
 push!(lin,lines!(ax1, factorrng, hals_r_means, color=mtdcolors[3], label="NNDSVD(RSVD)"))
 band!(ax1, factorrng, hals_r_lower, hals_r_upper, color=mtdcoloras[3])
-labels = ["ISVD","IncrementalSVD","Compression","NNDSVD(SVD)","NNDSVD(RSVD)"]
+labels = ["ISVD","Compression","NNDSVD(SVD)","NNDSVD(RSVD)"]
 #axislegend(ax1, labelsize=20, position = :lt) # halign = :left, valign = :top
 fig[:,2] = Legend(fig[:,1],lin,labels)
-save(joinpath(subworkpath,"factorrng_vs_rt1s(0,10).png"),fig,px_per_unit=2)
+save(joinpath(subworkpath,"factorrng_vs_rt1s.png"),fig,px_per_unit=2)
 
 
 

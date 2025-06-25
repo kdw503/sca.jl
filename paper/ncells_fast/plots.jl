@@ -174,7 +174,7 @@ for (i,(mtdstr, submtdstr, lbl, clridx, linestyle)) in enumerate([("pcb_precon",
     lns["$(frpx)_line"] = ln; bnds["$(frpx)_band"] = bnd;
 end
 
-axislegend(ax, labelsize=fntsize1, position = :rb) # halign = :left, valign = :top
+#axislegend(ax, labelsize=fntsize1, position = :rb) # halign = :left, valign = :top
 save(joinpath(subworkpath,"avgfits$(SNR)db$(factor)f$(ncells)s_all.png"),fig,px_per_unit=2)
 
 end # for ncells

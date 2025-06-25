@@ -178,7 +178,7 @@ Ximg = rotr90(load(joinpath(subworkpath,"X_SNR$(SNR)_LPF_maxSNR_W.png")))
 t = image!( fig.scene, Ximg)
 translate!(t, x+30, y+10, 100)
 
-axislegend(ax, labelsize=fntsize1, position = :rb) # halign = :left, valign = :top
+#axislegend(ax, labelsize=fntsize1, position = :rb) # halign = :left, valign = :top
 save(joinpath(subworkpath,"avgfits$(SNR)db$(factor)f$(ncells)s_all.png"),fig,px_per_unit=2)
 
 end # for SNR

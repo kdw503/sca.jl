@@ -174,7 +174,7 @@ for (i,(mtdstr, submtdstr, lbl, clridx, linestyle)) in enumerate([("pcb_precon",
     lns["$(frpx)_line"] = ln; bnds["$(frpx)_band"] = bnd;
 end
 
-axislegend(ax, labelsize=fntsize1, position = :rb) # halign = :left, valign = :top
+idx == 1 && axislegend(ax, labelsize=fntsize1, position = :rb) # halign = :left, valign = :top
 save(joinpath(subworkpath,"avgfits$(SNR)db$(factor)f$(ncells)s_all.png"),fig,px_per_unit=2)
 
 end # for factors
@@ -288,7 +288,7 @@ for (i,(mtdstr, submtdstr, lbl, clridx)) in enumerate([("pcb","_sp","PCB NNDSVD 
     lns["$(frpx)_line"] = ln; bnds["$(frpx)_band"] = bnd;
 end
 
-axislegend(ax, labelsize=30, position = :rb) # halign = :left, valign = :top
+idx == 1 && axislegend(ax, labelsize=30, position = :rb) # halign = :left, valign = :top
 save(joinpath(subworkpath,"avgfits$(SNR)db$(ncells)s_compare_initmethod.png"),fig,px_per_unit=2)
 
 end # for factor
