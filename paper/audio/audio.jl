@@ -24,7 +24,7 @@ X, imgsz, lengthT, ncells, gtncells, datadic = load_data(dataset);
 
 (m,n,p) = (size(X)...,ncells)
 gtW, gtH = dataset == :fakecells ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
-X = LCSVD.noisefilter(filter,X)
+X = LCSVD.noisefilter(filter,X,(0,0))
 
 subtract_bg=false; sbgstr = subtract_bg ? "sbg" : "nosbg"
 
@@ -44,26 +44,26 @@ mfmethod = :LCSVD; useprecond=false; uselv=false; s=10; maxiter = lcsvd_maxiter;
 r=(0.3)^1 #0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
   # if this is too big iteration number would be increased
 
-usedenoiseW0H0 = true; makepositive = true
-denoiseW0H0str = usedenoiseW0H0 ? "_udnW0H0" : ""
-(tailstr,initmethod,α,β) = ("_sp",:nndsvd,0.00,5.0) # ("_sp_nn",:isvd,0.005,5.0),("_nn",:nndsvd,0.,5.0)
+usedenoiseUVt = true; makepositive = true
+denoiseW0H0str = usedenoiseUVt ? "_udnW0H0" : ""
+(tailstr,initmethod,α,β) = ("_sp",:nndsvd,0.005,0.0) # ("_sp_nn",:isvd,0.005,5.0),("_nn",:nndsvd,0.,5.0)
 
 β1=β; β2=β; α1 = α2 = α
-rt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initlcsvd(X, ncells; initmethod=initmethod, svdmethod=:isvd)
-σ0=s*std(W0) #=10*std(W0)=#
-r=(0.3)^1 #0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
+rt1 = @elapsed U, Vt, M0, N0, Wp, Hp, D  = LCSVD.initpcb(X, ncells, 0; initmethod=initmethod, svdmethod=:isvd)
+V = copy(Vt'); N0t = copy(N0')
+r=0.3 #0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
   # if this is too big iteration number would be increased
-alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, σ0=σ0, r=r, useprecond=false, usedenoiseW0H0=usedenoiseW0H0,
+alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, σ0=σ0, r=r, useprecond=false, usedenoiseUVt=usedenoiseUVt,
     denoisefilter=:avg, uselv=false, imgsz=imgsz, maxiter = maxiter, store_trace = false,
     store_inner_trace = false, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
     f_inctol=1e2, x_abstol=tol, x_reltol=tol, successive_f_converge=0)
-M, N = copy(M0), copy(N0)
-rt0 = @elapsed rst0 = LCSVD.solve!(alg, X, W0, H0, D, M, N);
-M, N = copy(M0), copy(N0)
-rt2 = @elapsed rst0 = LCSVD.solve!(alg, X, W0, H0, D, M, N);
-Wlc, Hlc = rst0.W, rst0.H
+M, Nt = copy(M0), copy(N0t)
+rt0 = @elapsed rst1 = LCSVD.solve!(alg, X, U, V, D, M, Nt);
+M, Nt = copy(M0), copy(N0t)
+rt2 = @elapsed LCSVD.solve!(alg, X, U, V, D, M, Nt);
+Wlc, Hlc = rst1.W, rst1.Ht'
 # avgfit, ml, merrval, rerrs = SCA.matchedfitval(gtW, gtH, W1, H1; clamp=false)
-normalizeW!(Wlc,Hlc); fitval = LCSVD.fitd(X,Wlc*Hlc)
+LCSVD.normalizeW!(Wlc,Hlc); fitval = LCSVD.fitd(X,Wlc*Hlc)
 Wlc .*= 10; Hlc ./=10
 Wlc,Hlc = (nhs = map(a->norm(a[1:42]),eachrow(Hlc)); orderindices = sortperm(nhs, rev=true); (Wlc[:,orderindices],Hlc[orderindices,:]))
 fname = joinpath(subworkpath,"$(prefix)_$(initmethod)$(denoiseW0H0str)_a$(α)_b$(β)_f$(fitval)_it$(rst0.niters)_rt$(rt2)")
@@ -122,7 +122,7 @@ end
 # HALS
 prefix="hals"; @show prefix
 mfmethod = :HALS; 
-initmethod = :svd
+initmethod = :rsvd
 if initmethod == :rsvd
     rt1 = @elapsed Whals0, Hhals0 = NMF.nndsvd(X, ncells, variant=:ar);
 else
@@ -132,8 +132,8 @@ mfmethod = :HALS; αhals=0.1; maxiter = hals_maxiter; tol=-1
 Whals, Hhals = copy(Whals0), copy(Hhals0);
 rt2 = @elapsed NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=maxiter, α=αhals, l₁ratio=1,
             tol=tol, verbose=false), X, Whals, Hhals)
-normalizeW!(Whals,Hhals); fitval = LCSVD.fitd(X,Whals*Hhals)
-Whals .*= 10; Hhals ./=10; Whals,Hhals = sortWHslices(Whals,Hhals)
+LCSVD.normalizeW!(Whals,Hhals); fitval = LCSVD.fitd(X,Whals*Hhals)
+Whals .*= 10; Hhals ./=10; Whals,Hhals = LCSVD.sortWHslices(Whals,Hhals)
 fname = joinpath(subworkpath,"$(prefix)_a$(αhals)_f$(fitval)_it$(maxiter)_rt$(rt2)")
 fig = plotWH_data(dataset,fname,Whals,Hhals; space=10, issave=true)
 

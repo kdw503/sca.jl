@@ -24,7 +24,7 @@ file_name = feature_name*"-log2"
 X = load(joinpath(datapath,"AllenBrain","expression_matrices","WMB-10Xv2","20230630","$(file_name).h5ad")).X
 
 #====== Save data as NRRD memory mapped file and read it =============#
-using AxisArrays, NRRD
+using AxisArrays, NRRD, FileIO
 
 # Write whole WMB-10XV3 datasets
 sizexs = []; sizey = 32285

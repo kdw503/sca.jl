@@ -151,7 +151,7 @@ plotrng = Colon()
 
 # compare PCB with other methods
 fig = Figure(size=resol)
-maxplottimes = [0.3,2.0,3.0]
+maxplottimes = [0.3,2.0,2.5]
 ax = AMakie.Axis(fig[1, 1], limits = ((0,maxplottimes[idx]#=min(maxplottimes[idx],plottime)=#), ylimits),
                 xlabel = "time(sec)", ylabel = "average fit", xlabelsize=fntsize2, ylabelsize=fntsize2,
                 xticklabelsize=fntsize2, yticklabelsize=fntsize2)#, title = "Average Fit Value vs. Running Time")

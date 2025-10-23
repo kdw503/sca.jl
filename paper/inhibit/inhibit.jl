@@ -14,6 +14,9 @@ include(joinpath(workpath,"setup_light.jl"))
 include(joinpath(workpath,"setup_plot.jl"))
 include(joinpath(workpath,"utils.jl"))
 
+using RCall
+R"library(epca)"
+
 using LCSVD, CompNMF
 
 dataset = :fakecells; SNR=0; inhibitindices=[1,2,3]; bias=0.1
@@ -52,7 +55,7 @@ for subtract_bg in [false, true]
         X .-= bg
     end
 
-# LCSVD
+# PCB
 prefix = "PCB"
 @show prefix; flush(stdout)
 
@@ -62,13 +65,13 @@ r=(0.3)^1 #0.3 # decaying rate for relaxed L1, if this is too small result is ve
 
 makepositive = true
 
-(tailstr,initmethod,α,β) = ("_sp",:isvd,0.005,.0)# ("_nn",:nndsvd,0.,5.0), ("_sp_nn",:isvd,0.005,0.005)
+(tailstr,initmethod,α,β) = ("_sp",:tsvd,0.005,.0)# ("_nn",:nndsvd,0.,5.0), ("_sp_nn",:isvd,0.005,0.005)
 
 β1vec = fill(β, noc); β2vec = fill(β, noc); α1vec = fill(α, noc); α2vec = fill(α, noc)
 β1vec[1] = 0; β2vec[1] = 0; α1vec[1] = 0; α2vec[1] = 0
 rt1 = @elapsed W0, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(X, noc, nac; initmethod=initmethod, svdmethod=:isvd)
 H0t, N0t = copy(H0'), copy(N0')
-r=(0.3)
+r = 0.3
 alg = LCSVD.LinearCombSVD(α1=α, α2=α, β1=β, β2=β, r=r, useprecond=false,
     usedenoiseW0H0=false, denoisefilter=:avg, uselv=false, imgsz=imgsz, maxiter = maxiter,
     store_trace = false, store_inner_trace = false, show_trace = false, allow_f_increases = true,
@@ -81,10 +84,10 @@ M, Nt = copy(M0), copy(N0t)
 rt2 = @elapsed rst0 = LCSVD.solve!(alg, X, W0, H0t, D, M, Nt);
 W, H = rst0.W, rst0.Ht'
 LCSVD.normalizeW!(W,H);
-# avgnssda, ml, nssdas = LCSVD.matchedWnssda(gtW, W); fitval = LCSVD.fitd(X,W*H)
-avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W, H; clamp=false); fitval = avgfit
-#nodr = LCSVD.matchedorder(ml,noc); Wlc, Hlc = W[:,nodr], H[nodr,:]; # W3,H3 = sortWHslices(W1,H1)
-Wlc, Hlc = W, H
+avgnssda, ml, nssdas = LCSVD.matchedWnssda(gtW, W); fitval = LCSVD.fitd(X,W*H)
+# avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W, H; clamp=false); fitval = LCSVD.fitd(X,W*H)
+fitval = fv
+nodr = LCSVD.matchedorder(ml,noc); Wlc, Hlc = W[:,nodr], H[nodr,:]; # W3,H3 = sortWHslices(W1,H1)
 makepositive && LCSVD.flip2makepos!(Wlc,Hlc)
 fprex = "$(prefix)$(SNR)db$(inhibitindices)_bias$(bias)_$(sbgstr)"
 fname = joinpath(subworkpath,"$(fprex)_a$(α)_b$(β)_f$(fitval)_it$(rst0.niters)_rt$(rt2)")
@@ -103,16 +106,15 @@ rt2 = @elapsed NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=maxiter, α=αh
                 tol=tol, verbose=false), X, W, H)
 # avgfit, ml, merrval, rerrs = SCA.matchedfitval(gtW, gtH, Whals, Hhals; clamp=false)
 LCSVD.normalizeW!(W,H)
-# avgnssda, ml, nssdas = LCSVD.matchedWnssda(gtW, W); fitval = LCSVD.fitd(X,W*H)
-avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W, H; clamp=false); fitval = avgfit
+avgnssda, ml, nssdas = LCSVD.matchedWnssda(gtW, W); fitval = LCSVD.fitd(X,W*H)
+# avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W, H; clamp=false); fitval = LCSVD.fitd(X,W*H)
 nodr = LCSVD.matchedorder(ml,noc); Whals, Hhals = W[:,nodr], H[nodr,:]; # W3,H3 = sortWHslices(Whals,Hhals)
-makepositive && LCSVD.flip2makepos!(Whals,Hhals)
+LCSVD.flip2makepos!(Whals,Hhals)
 fprex = "$(prefix)$(SNR)db$(inhibitindices)_bias$(bias)_$(sbgstr)"
 fname = joinpath(subworkpath,"$(fprex)_a$(αhals)_f$(fitval)_it$(maxiter)_rt$(rt2)")
 imsave_data(dataset,fname,Whals,Hhals,imgsz,100; saveH=false)
 # plotH_data(fname*"_Hinhibit",Hhals[inhibitindices,:]; space=0.,ylabel="",ytickformat="{:.2f}")
 plotH_data(fname*"_H",Hhals[1:8,:]; space=0.,ylabel="",ytickformat="{:.2f}")
-
 
 # COMPNMF
 prefix = "compnmf"
@@ -128,22 +130,59 @@ rt2 = @elapsed rst0 = CompNMF.solve!(CompNMF.CompressedNMF{Float64}(maxiter=maxi
 rt1 += rst0.inittime # add calculation time for compression matrices L and R
 rt2 -= rst0.inittime
 LCSVD.normalizeW!(W,H)
-# avgnssda, ml, nssdas = LCSVD.matchedWnssda(gtW, W); fitval = LCSVD.fitd(X,W*H)
-avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W, H; clamp=false); fitval = avgfit
+avgnssda, ml, nssdas = LCSVD.matchedWnssda(gtW, W); fitval = LCSVD.fitd(X,W*H)
+# avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W, H; clamp=false); fitval = LCSVD.fitd(X,W*H)
 nodr = LCSVD.matchedorder(ml,noc); Wcn, Hcn = W[:,nodr], H[nodr,:]; # W3,H3 = sortWHslices(Wcn,Hcn)
-makepositive && LCSVD.flip2makepos!(Wcn,Hcn)
+LCSVD.flip2makepos!(Wcn,Hcn)
 fprex = "$(prefix)$(SNR)db$(inhibitindices)_bias$(bias)_$(sbgstr)"
 fname = joinpath(subworkpath,"$(fprex)_f$(fitval)_it$(rst0.niters)_rt$(rt2)")
 imsave_data(dataset,fname,Wcn,Hcn,imgsz,100; saveH=false)
 # plotH_data(fname*"_Hinhibit",Hcn[inhibitindices,:]; space=0.,ylabel="",ytickformat="{:.2f}")
 plotH_data(fname*"_H",Hcn[1:8,:]; space=0.,ylabel="",ytickformat="{:.2f}")
 
+# SMA : Sparse Matrix Approximation (sparsity is applied to both W(Z is nXk) and H(Y' is kXp))
+prefix = "sma"
+@rput X
+rt2 = @elapsed R"factors_sma <-sma(X, k=15)" # gamma_z=sqrt(p*k) and gamma is default
+@rget factors_sma
+rW = factors_sma[:z]; rH = Array(factors_sma[:y]'); b = factors_sma[:b]; rH = b*rH
+LCSVD.normalizeW!(rW,rH)
+avgnssda, ml, nssdas = LCSVD.matchedWnssda(gtW, rW); fitval = LCSVD.fitd(X,rW*rH)
+# afv, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, rW, rH; clamp=false); fitval = LCSVD.fitd(X,rW*rH)
+sw = norm(rW,1)
+Xy = X*rH'*inv(rH*rH')*rH; pve = norm(Xy)^2/normX2
+nodr = LCSVD.matchedorder(ml,noc); Wsma, Hsma = rW[:,nodr], rH[nodr,:]; # W3,H3 = sortWHslices(Whals,Hhals)
+makepositive && LCSVD.flip2makepos!(Wsma,Hsma); # Wsca[:,5:7] .*= -1; Hsca[5:7,:] .*= -1
+fprex = "$(prefix)$(SNR)db$(inhibitindices)_bias$(bias)_$(sbgstr)"
+fname = joinpath(subworkpath,"$(fprex)_f$(fitval)_rt$(rt2)")
+imsave_data(dataset,fname,Wsma,Hsma,imgsz,100; saveH=false, scalemtd=:maxcol)
+plotH_data(fname*"_H",Hsma[1:8,:]; space=0.,ylabel="",ytickformat="{:.2f}")
+
+# SMA : Sparse Matrix Approximation (sparsity is applied to both W(Z is nXk) and H(Y' is kXp))
+prefix = "sma"
+@rput X
+g = 1000; @rput g
+rt2 = @elapsed R"factors_sma <-sma(X, k=15, gamma=g)" # gamma_z=sqrt(p*k) and gamma is default
+@rget factors_sma
+rW = factors_sma[:z]; rH = Array(factors_sma[:y]'); b = factors_sma[:b]; rH = b*rH
+LCSVD.normalizeW!(rW,rH)
+avgnssda, ml, nssdas = LCSVD.matchedWnssda(gtW, rW); fitval = LCSVD.fitd(X,rW*rH)
+# afv, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, rW, rH; clamp=false); fitval = LCSVD.fitd(X,rW*rH)
+sw = norm(rW,1)
+Xy = X*rH'*inv(rH*rH')*rH; pve = norm(Xy)^2/normX2
+nodr = LCSVD.matchedorder(ml,noc); Wsma, Hsma = rW[:,nodr], rH[nodr,:]; # W3,H3 = sortWHslices(Whals,Hhals)
+makepositive && LCSVD.flip2makepos!(Wsma,Hsma); # Wsca[:,5:7] .*= -1; Hsca[5:7,:] .*= -1
+fprex = "$(prefix)$(SNR)db$(inhibitindices)_bias$(bias)_$(sbgstr)"
+fname = joinpath(subworkpath,"$(fprex)_g$(g)_f$(fitval)_rt$(rt2)")
+imsave_data(dataset,fname,Wsma,Hsma,imgsz,100; saveH=false, scalemtd=:maxcol)
+plotH_data(fname*"_H",Hsma[1:8,:]; space=0.,ylabel="",ytickformat="{:.2f}")
+
 # # result for 1 inhibit cell
 # imggt = mkimgW(gtW,imgsz); imglc = mkimgW(Wlc,imgsz); imgcn = mkimgW(Wcn,imgsz); imghals = mkimgW(Whals,imgsz)
 # # scainhibitindices = (bias == 0.5) && (subtract_bg == false) ? 8 : inhibitindices
 # hdata = [gtH[:,inhibitindices[1]],Hlc[inhibitindices[1],:],Hcn[inhibitindices[1],:],Hhals[inhibitindices[1],:]] # Hlc inhibit index setting for plot
 # labels = ["Ground Truth","PCB","Compressed NMF","HALS NMF"]
-# f = Figure(resolution = (1000,400))
+# f = Figure(size = (1000,400))
 # ax11=AMakie.Axis(f[1,1],title=labels[1], aspect = DataAspect()); hidedecorations!(ax11)
 # ax21=AMakie.Axis(f[2,1],title=labels[2], aspect = DataAspect()); hidedecorations!(ax21)
 # ax31=AMakie.Axis(f[3,1],title=labels[3], aspect = DataAspect()); hidedecorations!(ax31)
@@ -168,7 +207,7 @@ if length(inhibitindices) > 1
     hdata2 = #=subtract_bg=# false ? [gtH[:,hindices[2]],Hlc[hindices[2],:]] :
             [gtH[:,hindices[2]],Hlc[hindices[2],:],Hcn[hindices[2],:],Hhals[hindices[2],:]] # Hlc inhibit index setting for plot
     labels = ["Ground Truth","PCB","Compressed NMF","HALS NMF"]
-    f = Figure(resolution = (1000,400))
+    f = Figure(size = (1000,400))
     ax11=AMakie.Axis(f[1,1],title=labels[1], aspect = DataAspect()); hidedecorations!(ax11)
     ax21=AMakie.Axis(f[2,1],title=labels[2], aspect = DataAspect()); hidedecorations!(ax21)
     ax31=AMakie.Axis(f[3,1],title=labels[3], aspect = DataAspect()); hidedecorations!(ax31)
@@ -191,7 +230,7 @@ end # subtract_bg
 imggt = mkimgW(gtW,imgsz)
 hdata = eachcol(gtH)
 labels = ["cell $i" for i in 1:length(hdata)]
-f = Figure(resolution = (900,400))
+f = Figure(size = (900,400))
 ax11=AMakie.Axis(f[1,1],title="W component", aspect = DataAspect()); hidedecorations!(ax11)
 axall2=AMakie.Axis(f[:,2],title="H component",xlabel="time index")
 image!(ax11, rotr90(imggt))

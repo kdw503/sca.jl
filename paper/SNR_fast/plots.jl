@@ -177,7 +177,7 @@ end
 viewport = content(fig.layout[1,1]).scene.viewport[]
 x,y = viewport.origin#; w,h = viewport.widths; Note, `size(scene) == widths(scene.viewport[])`
 Ximg = rotr90(load(joinpath(subworkpath,"X_SNR$(SNR)_maxSNR_W.png")))
-t = image!( fig.scene, Ximg)
+t = image!(fig.scene, Ximg)
 translate!(t, x+30, y+10, 100)
 
 idx == 3 && axislegend(ax, labelsize=fntsize1, position = :rb) # halign = :left, valign = :top

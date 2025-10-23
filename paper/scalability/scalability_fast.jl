@@ -75,14 +75,17 @@ save(joinpath(subworkpath,"scalability","scalability_all_figures(4X3)_fast.png")
 
 
 #======= 3X3 =========================#
-fontsize = 30; rowsize = 400 
+fontsize = 25; lbl_fontsize = 20; rowsize = 360
 
-f = Figure(resolution = (1620, 1350))
+f = Figure(resolution = (1500, 1200))
 rowgap!(f.layout,0)
 
 g1 = f[1, 1] = GridLayout()
 g2 = f[2, 1] = GridLayout()
 g3 = f[3, 1] = GridLayout()
+l1 = f[1, 2] = GridLayout()
+l2 = f[2, 2] = GridLayout()
+l3 = f[3, 2] = GridLayout()
 
 # Panel SNR
 fname = joinpath(subworkpath, "SNR_fast", "avgfits20db1f15s_all.png")
@@ -120,5 +123,15 @@ axj=AMakie.Axis(g3[1,3], title="(i) size = 40 × 20 × 1000", titlesize=fontsize
 hidedecorations!(axj, label=false); hidespines!(axj); image!(axj, rotr90(load(fname)));
 rowsize!(g3,1,rowsize); colgap!(g3,0)
 rowgap!(f.layout,0)
+
+lbls = ["PCB (α=0.005,β=0)",
+        "PCB (α=0.005,β=5.0)",
+        "Compressed NMF",
+        "HALS (α=0)",
+        "HALS (α=0.1)"]
+clrindices = [2,4,5,3,7]
+linestyles = [nothing, :dash, nothing, nothing, :dash]
+elems = map(i->LineElement(color=mtdcolors[clrindices[i]], linestyle = linestyles[i]), 1:5)
+Legend(l2[1,1], elems, lbls, "Methods", patchsize = (30, 30), rowgap = 8, labelsize = lbl_fontsize)
 
 save(joinpath(subworkpath,"scalability","scalability_all_figures_fast.png"),f,px_per_unit=2)

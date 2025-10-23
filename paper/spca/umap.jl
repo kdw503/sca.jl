@@ -45,7 +45,7 @@ resX = rescale(X, dims=1);
 #dd = load(joinpath(subworkpath,"Muraro","aftr_nor_hclust_noc9_lkgaverage_hnothing_ne1.jld2"))
 #dd = load(joinpath(subworkpath,"Segerstolpe","aftr_nor_hclust_noc9_lkgaverage_hnothing_ne1.jld2"))
 #dd = load(joinpath(subworkpath,"Xin","aftr_nor_hclust_noc6_lkgaverage_hnothing_ne1.jld2"))
-dd = load(joinpath(subworkpath,dataset,"aftr_nor_hclust_noc11_lkgcomplete_hnothing_ne1.jld2"))
+dd = load(joinpath(subworkpath,dataset,"aftr_nor_hclust_noc9_lkgaverage_hnothing_ne1_090925.jld2"))
 clust_pcb = dd["clustsn"][1]; clust_label_pcb = assign_celltypes(clust_pcb, label)
 clust_tsvd = dd["clustsn_tsvd"][1]; clust_label_tsvd = assign_celltypes(clust_tsvd, label)
 clust_sma = dd["clustsn_sma"][1]; clust_label_sma = assign_celltypes(clust_sma, label)
@@ -226,8 +226,14 @@ tembedding = load(joinpath(subworkpath,dataset,"TSNE_Xin_resX_GT_rdim9_pxty30.jl
 ndim = 2; reduce_dims = 9; max_iter = 1000; perplexity = 40.0 # Muraro
 resX = rescale(X, dims=1);
 tembedding = tsne(resX, ndim, reduce_dims, max_iter, perplexity; progress=true);
-save(joinpath(subworkpath, dataset, "tsne_all.jld2"), "clust_pcb", clust_pcb, "clust_tsvd", clust_tsvd,
+save(joinpath(subworkpath, dataset, "tsne_all_090925.jld2"), "clust_pcb", clust_pcb, "clust_tsvd", clust_tsvd,
         "clust_sma", clust_sma, "clust_hals", clust_hals, "tembedding", tembedding)
+dd = load(joinpath(subworkpath, dataset, "tsne_all.jld2"))
+tembedding = dd["tembedding"]
+clust_pcb = dd["clust_pcb"]
+clust_tsvd = dd["clust_tsvd"]
+clust_sma = dd["clust_sma"]
+clust_hals = dd["clust_hals"]
 
 f = AMakie.Figure(size=(500,320))
 ax = AMakie.Axis(f[1, 1], xlabel = "t-sne1", ylabel = "t-sne2", title = "")

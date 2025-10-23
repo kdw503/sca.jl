@@ -81,7 +81,7 @@ for prefix in methods
 if prefix in ["pcb_precon","pcb_precon_LPF","pcb","pcb_LPF","pcb_precon_tsvd","pcb_tsvd"]
     # LCSVD
     useprecond = prefix ∈ ["pcb_precon","pcb_precon_LPF","pcb_precon_tsvd"] ? true : false
-    usedenoiseW0H0 = prefix ∈ ["pcb_precon_LPF","pcb_LPF"] ? true : false
+    usedenoiseUVt = prefix ∈ ["pcb_precon_LPF","pcb_LPF"] ? true : false
     uselv=false; maxiter = pcb_maxiter
     r=0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
         # if this is too big iteration number would be increased
@@ -99,7 +99,7 @@ if prefix in ["pcb_precon","pcb_precon_LPF","pcb","pcb_LPF","pcb_precon_tsvd","p
         inner_tol = 1e-6; inner_maxiter = 50#Int(ceil(2.5*ncs+350))# Int(ceil(0.75*ncs+100)) # 
         alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2,
             #α1vec=α1vec, α2vec=α2vec, β1vec=β1vec, β2vec=β2vec,
-            r=r, useprecond=useprecond, usedenoiseW0H0=usedenoiseW0H0, maskW=maskW, maskH = maskH,
+            r=r, useprecond=useprecond, usedenoiseUVt=usedenoiseUVt, maskW=maskW, maskH = maskH,
             denoisefilter=:avg, uselv=uselv, imgsz=imgsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
             store_inner_trace = true, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
             f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0);

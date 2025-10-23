@@ -197,9 +197,12 @@ function clustring_experi(method, Worg, label, label_counts; D = nothing, normal
             r = n == 0 ? r : r ./= n
         end
     end
-    precisionss=[]; recallss=[]; avg_precs=[]; avg_recs=[]; clusts=[]; results=[]
+    precisionss=[]; recallss=[]; avg_precs=Float64[]; avg_recs=Float64[]
+    clusts=[]; results=[]
     for i in 1:nepmt
-        if method == :bootstrap
+        if method == :neighborhood
+            clust = cluster(W', bs_pvalue)
+        elseif method == :bootstrap
             clust = cluster_resample(W', bs_nresample, bs_pvalue)
         elseif method == :kmeans
             clustering = kmeans(W', noc; init=:kmpp, maxiter=km_maxiter, tol=1e-6, display=:none) # each column of X is a d-dimensional data point) into k clusters.
@@ -213,9 +216,10 @@ function clustring_experi(method, Worg, label, label_counts; D = nothing, normal
             #     D[i,j] = norm(W[i,:]-W[j,:])
             # end
             # D += D'
-            D = D === nothing ? pairwise(Euclidean(), Worg, dims=1) : D
+            D = D === nothing ? pairwise(Euclidean(), W, dims=1) : D
             result = hclust(D, linkage=hc_linkage)
             clust = cutree(result; k=noc, h=hc_h)
+            push!(results, result); push!(clusts, clust)
         elseif method == :gmm
             mod = GaussianMixtureClusterer(n_classes=gc_n_classes) # A Generative Mixture Model (unfitted)
             prob_belong_classes = BetaML.fit!(mod,W)
@@ -225,7 +229,7 @@ function clustring_experi(method, Worg, label, label_counts; D = nothing, normal
         end
         clust_label = assign_celltypes(clust, label) # 119, noc
         precisions, recalls, avg_prec, avg_rec = cal_precision_recall(clust_label, label) #  0.7675450079084044, 0.7679667607042434
-        push!(precisionss,precisions); push!(recallss,recalls); push!(results, result); push!(clusts, clust)
+        push!(precisionss,precisions); push!(recallss,recalls)
         #push!(avg_precs, avg_prec); push!(avg_recs, avg_rec)
     end
     pre_means = T[]; pre_stds = T[]; rec_means = T[]; rec_stds = T[]
@@ -282,4 +286,7 @@ function clustered_hitmap(cellsclass, classboundries, mycmap, fprex;
         end
         save(fprex*"_wb_$(i).png",f)
     end
+end
+function label2int(lab)
+    return findfirst(ulabel .== lab)
 end

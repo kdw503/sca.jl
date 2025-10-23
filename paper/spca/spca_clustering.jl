@@ -15,7 +15,7 @@ include(joinpath(workpath,"setup_plot.jl"))
 include(joinpath(workpath,"utils.jl"))
 include(joinpath(workpath,"clustering.jl"))
 
-using RCall
+using RCall, ClusteringBenchmarks
 
 R"""
 library(scRNAseq)
@@ -27,13 +27,13 @@ library(Matrix) # as.matrix
 library(ggplot2)
 """
 
-dataset = "Xin" # Baron, Muraro, Segerstolpe, Xin
+dataset = "Baron" # Baron, Muraro, Segerstolpe, Xin
 ddorg = load(joinpath(subworkpath, dataset, "Xr_$(dataset).jld2"))
 Xr = ddorg["Xr"]; label = ddorg["label"]; genename = ddorg["genename"]
 
-ddrst = load(joinpath(subworkpath,dataset,"$(dataset)_Result_sp.jld2"))
-Wisvd, Htisvd, Wtsvd, Httsvd = ddrst["Wisvd"], ddrst["Htisvd"], ddrst["Wtsvd"], ddrst["Httsvd"]
-Wpcb, Htpcb, Wsma, Htsma = ddrst["Wpcb"], ddrst["Htpcb"], ddrst["Wsma"], ddrst["Htsma"]
+ddrst = load(joinpath(subworkpath,dataset,"$(dataset)_Result_sp090925.jld2"))
+Wtsvd, Httsvd = ddrst["Wtsvd"], ddrst["Httsvd"]
+Wpcb, Htpcb, Wsma, Htsma = ddrst["Wpcb"], ddrst["Htpcb"], ddrst["Wsma"], Array(ddrst["Htsma"])
 Whals, Hthals = ddrst["Whals"], ddrst["Hthals"]
 # dd = load(joinpath(subworkpath,dataset,"Result_sp_nn_s0321.jld2"))
 # X, label, genename = dd["X"], dd["cell_type_label"], dd["gene_name"]
@@ -41,30 +41,185 @@ Whals, Hthals = ddrst["Whals"], ddrst["Hthals"]
 
 label = string.(label)
 ulabel = unique(label)
+ilabel = label2int.(label)
 cmap = countmap(label)
 label_counts = map(l->cmap[l],ulabel)
 gtnoc = length(ulabel)
 
 # Clustering
-pvalue = 0.0001;
-clust = cluster(Wpcb', pvalue)
+pvalue = 0.0001
+pvalues = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 1e-12, 1e-13, 1e-14, 1e-15, 1e-16]
+nclust_pcbs = Float64[]; nclust_smas = Float64[]; nclust_halss = Float64[]
+ami_pcbs = Float64[]; ami_smas = Float64[]; ami_halss = Float64[];
+for pvalue in pvalues
+    @show pvalue
+    clust = cluster(Wpcb', pvalue)
+    amival = ami(ilabel,clust)
+    clust_sma = cluster(Wsma', pvalue)
+    amival_sma = ami(ilabel,clust_sma)
+    clust_hals = cluster(Whals', pvalue)
+    amival_hals = ami(ilabel,clust_hals)
+    nclust_pcb, nclust_sma, nclust_hals = maximum(clust), maximum(clust_sma), maximum(clust_hals)
+    ami_pcb, ami_sma, ami_hals = round(amival, sigdigits=4), round(amival_sma, sigdigits=4), round(amival_hals, sigdigits=4)
+    push!(nclust_pcbs, nclust_pcb); push!(nclust_smas, nclust_sma); push!(nclust_halss, nclust_hals)
+    push!(ami_pcbs, ami_pcb); push!(ami_smas, ami_sma); push!(ami_halss, ami_hals)
+end
+for (i,pvalue) in enumerate(pvalues)
+    nclust_pcb = nclust_pcbs[i]; nclust_sma = nclust_smas[i]; nclust_hals = nclust_halss[i]
+    ami_pcb = ami_pcbs[i]; ami_sma = ami_smas[i]; ami_hals = ami_halss[i]
+    @show pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals
+end
+f = Figure(size=(500, 400))
+ax = AMakie.Axis(f[1, 1], xlabel="p-value", xscale=log10, ylabel="Number of clusters", title="Number of clusters")
+lines!(ax, pvalues, nclust_pcbs, label="PCB", color=:blue)
+lines!(ax, pvalues, nclust_smas, label="SMA", color=:orange)
+lines!(ax, pvalues, nclust_halss, label="HALS", color=:green)
+axislegend(ax, position=:lt, title="")
+save(joinpath(subworkpath, dataset, "clustering_noc.png"),f)
+
+f = Figure(size=(500, 400))
+ax = AMakie.Axis(f[1, 1], xlabel="p-value", xscale=log10, ylabel="Adjusted Mutual Information (AMI)", title="Clustering AMI")
+lines!(ax, pvalues, ami_pcbs, label="PCB", color=:blue)
+lines!(ax, pvalues, ami_smas, label="SMA", color=:orange)
+lines!(ax, pvalues, ami_halss, label="HALS", color=:green)
+axislegend(ax, position=:lb, title="")
+save(joinpath(subworkpath, dataset, "clustering_ami.png"),f)
 
 # Bootstrap clustering
-pvalue=0.0000001; nresample = 5
-for pvalue in [0.000001, 0.0000001]
-    for nresample in [3]
-        clust = cluster_resample(Wpcb', nresample, pvalue)
-        save(joinpath(subworkpath,dataset,"Clustering_p$(pvalue)_n$(nresample)_sp_nn_s0322.jld2"),"clust", clust, "pvalue", pvalue, "nresample", nresample)
-        clust_sma = cluster_resample(Wsma', nresample, pvalue)
-        @show maximum(clust), maximum(clust_sma)
-    end
+pvalue=0.0000001; nresample = 50
+pvalues = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 1e-12, 1e-13, 1e-14, 1e-15, 1e-16]
+nclust_pcbs = Float64[]; nclust_smas = Float64[]; nclust_halss = Float64[]
+ami_pcbs = Float64[]; ami_smas = Float64[]; ami_halss = Float64[];
+for pvalue in pvalues
+    @show pvalue
+    clust = cluster_resample(Wpcb', nresample, pvalue)
+    amival_pcb = ami(ilabel,clust)
+    clust_sma = cluster_resample(Wsma', nresample, pvalue)
+    amival_sma = ami(ilabel,clust_sma)
+    clust_hals = cluster_resample(Whals', nresample, pvalue)
+    amival_hals = ami(ilabel,clust_hals)
+    nclust_pcb, nclust_sma, nclust_hals = maximum(clust), maximum(clust_sma), maximum(clust_hals)
+    ami_pcb, ami_sma, ami_hals = round(amival_pcb, sigdigits=4), round(amival_sma, sigdigits=4), round(amival_hals, sigdigits=4)
+    push!(nclust_pcbs, nclust_pcb); push!(nclust_smas, nclust_sma); push!(nclust_halss, nclust_hals)
+    push!(ami_pcbs, ami_pcb); push!(ami_smas, ami_sma); push!(ami_halss, ami_hals)
 end
+for (i,pvalue) in enumerate(pvalues)
+    nclust_pcb = nclust_pcbs[i]; nclust_sma = nclust_smas[i]; nclust_hals = nclust_halss[i]
+    ami_pcb = ami_pcbs[i]; ami_sma = ami_smas[i]; ami_hals = ami_halss[i]
+    @show pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals
+end
+f = Figure(size=(500, 400))
+ax = AMakie.Axis(f[1, 1], xlabel="p-value", xscale=log10, ylabel="Number of clusters", title="Number of clusters")
+lines!(ax, pvalues, nclust_pcbs, label="PCB", color=:blue)
+lines!(ax, pvalues, nclust_smas, label="SMA", color=:orange)
+lines!(ax, pvalues, nclust_halss, label="HALS", color=:green)
+axislegend(ax, position=:lt, title="")
+save(joinpath(subworkpath, dataset, "bootstrap_noc.png"),f)
+
+f = Figure(size=(500, 400))
+ax = AMakie.Axis(f[1, 1], xlabel="p-value", xscale=log10, ylabel="Adjusted Mutual Information (AMI)", title="Clustering AMI")
+lines!(ax, pvalues, ami_pcbs, label="PCB", color=:blue)
+lines!(ax, pvalues, ami_smas, label="SMA", color=:orange)
+lines!(ax, pvalues, ami_halss, label="HALS", color=:green)
+axislegend(ax, position=:lb, title="")
+save(joinpath(subworkpath, dataset, "bootstrap_ami.png"),f)
+
 countmap(clust)
 countmap(label) # Ground truth
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (0.1, 324, 321, 348, 0.4772, 0.4752, 0.4696)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (0.01, 145, 164, 179, 0.5048, 0.5005, 0.4924)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (0.001, 81, 92, 124, 0.531, 0.5273, 0.5059)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (0.0001, 59, 55, 86, 0.5503, 0.5546, 0.5233)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (1.0e-5, 52, 48, 62, 0.5548, 0.5549, 0.5513)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (1.0e-6, 37, 30, 45, 0.5788, 0.5853, 0.5684)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (1.0e-7, 36, 30, 37, 0.5831, 0.5869, 0.5881)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (1.0e-8, 31, 29, 35, 0.6017, 0.6072, 0.5827)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (1.0e-9, 21, 26, 25, 0.6375, 0.6312, 0.6062)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (1.0e-10, 23, 23, 23, 0.6455, 0.6329, 0.6309)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (1.0e-11, 18, 20, 17, 0.6529, 0.6229, 0.6426)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (1.0e-12, 20, 21, 18, 0.6097, 0.6255, 0.6354)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (1.0e-13, 14, 18, 22, 0.6438, 0.6363, 0.6074)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (1.0e-14, 15, 14, 16, 0.6384, 0.6403, 0.648)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (1.0e-15, 15, 15, 16, 0.6324, 0.6585, 0.6532)
+# (pvalue, nclust_pcb, nclust_sma, nclust_hals, ami_pcb, ami_sma, ami_hals) = (1.0e-16, 13, 15, 16, 0.6373, 0.6516, 0.6424)
 
+
+# neighborhood
+# Hierarchical clustering after normalization : hc_h=300
+method = :bootstrap; normalization = true; clnoc = gtnoc
+nepmt = 1 # looks diterministic (no statistic)
+pvalue = 1e-11; nresample = 50
+pvalues = [1e-11]
+for bs_pvalue in pvalues, nresample in [50]
+    @show bs_pvalue, nresample
+    # Clustering after normalization (PCB)
+    #gridsearch_params(Wpcbn, label, [1e-1, 1e-2, 1e-3, 1e-4, 1e-5], [1,2,3])
+    pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren, wavg_recn, precisionssn, recallssn, rstsn, clustsn =
+        clustring_experi(method, Wpcb, label, label_counts; noc=clnoc, normalization=normalization, bs_pvalue=bs_pvalue,
+                        bs_nresample=nresample, nepmt=nepmt)
+
+    # Clustering after normalization (TSVD)
+    pre_meansn_tsvd, pre_stdsn_tsvd, rec_meansn_tsvd, rec_stdsn_tsvd, wavg_pren_tsvd, wavg_recn_tsvd,
+        precisionssn_tsvd, recallssn_tsvd, rstsn_tsvd, clustsn_tsvd = clustring_experi(method, Wtsvd, label, label_counts;
+        noc=clnoc, normalization=normalization, bs_pvalue=bs_pvalue, bs_nresample=nresample, nepmt=nepmt)
+
+    # Clustering after normalization (SMA)
+    pre_meansn_sma, pre_stdsn_sma, rec_meansn_sma, rec_stdsn_sma, wavg_pren_sma, wavg_recn_sma,
+        precisionssn_sma, recallssn_sma, rstsn_tsvd, clustsn_sma = clustring_experi(method, Wsma, label, label_counts;
+        noc=clnoc, normalization=normalization, bs_pvalue=bs_pvalue, bs_nresample=nresample, nepmt=nepmt)
+
+    # Clustering after normalization (HALS)
+    pre_meansn_hals, pre_stdsn_hals, rec_meansn_hals, rec_stdsn_hals, wavg_pren_hals, wavg_recn_hals,
+        precisionssn_hals, recallssn_hals, rstsn_tsvd, clustsn_hals = clustring_experi(method, Whals, label, label_counts;
+        noc=clnoc, normalization=normalization, bs_pvalue=bs_pvalue, bs_nresample=nresample, nepmt=nepmt)
+
+    @show wavg_pren, wavg_recn
+    @show wavg_pren_tsvd, wavg_recn_tsvd
+    @show wavg_pren_sma, wavg_recn_sma
+    @show wavg_pren_hals, wavg_recn_hals
+
+    f = plot_qm4(pre_meansn, pre_meansn_tsvd, pre_meansn_sma, pre_meansn_hals, pre_stdsn, pre_stdsn_tsvd, pre_stdsn_sma, pre_stdsn_hals, label, label_counts; ylabel="precision")
+    save(joinpath(subworkpath,dataset,"Pre_aftr_nor_$(method)_noc$(clnoc)_p$(bs_pvalue)_nr$(nresample)_wHALS.png"),f,px_per_unit=2)
+    f = plot_qm4(rec_meansn, rec_meansn_tsvd, rec_meansn_sma, rec_meansn_hals, rec_stdsn, rec_stdsn_tsvd, rec_stdsn_sma, rec_stdsn_hals, label, label_counts; ylabel="recalls")
+    save(joinpath(subworkpath,dataset,"Rec_aftr_nor_$(method)_noc$(clnoc)_p$(bs_pvalue)_nr$(nresample)_wHALS.png"),f,px_per_unit=2)
+    save(joinpath(subworkpath,dataset,"aftr_nor_$(method)_noc$(clnoc)_p$(bs_pvalue)_nr$(nresample).jld2"),
+        "pre_meansn", pre_meansn, "pre_meansn_tsvd", pre_meansn_tsvd, "pre_meansn_sma", pre_meansn_sma, "pre_meansn_hals", pre_meansn_hals,
+        "pre_stdsn", pre_stdsn, "pre_stdsn_tsvd", pre_stdsn_tsvd, "pre_stdsn_sma", pre_stdsn_sma,"pre_stdsn_hals", pre_stdsn_hals,
+        "rec_meansn", rec_meansn, "rec_meansn_tsvd", rec_meansn_tsvd, "rec_meansn_sma", rec_meansn_sma, "rec_meansn_hals", rec_meansn_hals,
+        "rec_stdsn", rec_stdsn, "rec_stdsn_tsvd", rec_stdsn_tsvd, "rec_stdsn_sma", rec_stdsn_sma, "rec_stdsn_hals", rec_stdsn_hals,
+        "wavg_pren", wavg_pren, "wavg_pren_tsvd", wavg_pren_tsvd, "wavg_pren_sma", wavg_pren_sma, "wavg_pren_hals", wavg_pren_hals,
+        "wavg_recn", wavg_recn, "wavg_recn_tsvd", wavg_recn_tsvd, "wavg_recn_sma", wavg_recn_sma, "wavg_recn_hals", wavg_recn_hals,
+        "clustsn", clustsn, "clustsn_tsvd", clustsn_tsvd, "clustsn_sma", clustsn_sma, "clustsn_hals", clustsn_hals,
+        "label", label, "label_counts", label_counts)
+end
+
+
+(bs_pvalue, nresample) = (0.001, 50)
+(wavg_pren, wavg_recn) = (0.8257720336854938, 0.2505028990651994)
+(wavg_pren_tsvd, wavg_recn_tsvd) = (0.8283180009583834, 0.23133356999171695)
+(wavg_pren_sma, wavg_recn_sma) = (0.8286385147072002, 0.2339368122115726)
+(wavg_pren_hals, wavg_recn_hals) = (0.8335824557262398, 0.1699207194414862)
+
+(bs_pvalue, nresample) = (0.001, 100)
+(wavg_pren, wavg_recn) = (0.8243367630945185, 0.24979292391432967)
+(wavg_pren_tsvd, wavg_recn_tsvd) = (0.8126797656462078, 0.23677671281505147)
+(wavg_pren_sma, wavg_recn_sma) = (0.8291676203551789, 0.24150988048751626)
+(wavg_pren_hals, wavg_recn_hals) = (0.8257319423466086, 0.17702047095018342)
+
+(bs_pvalue, nresample) = (1.0e-11, 50)
+(wavg_pren, wavg_recn) = (0.8237112260402019, 0.6751863684771033)
+(wavg_pren_tsvd, wavg_recn_tsvd) = (0.812918119688126, 0.6771979647379008)
+(wavg_pren_sma, wavg_recn_sma) = (0.8134717363504307, 0.6611051946515205)
+(wavg_pren_hals, wavg_recn_hals) = (0.8287488534238123, 0.45142586676133)
+
+(bs_pvalue, nresample) = (1.0e-11, 100)
+(wavg_pren, wavg_recn) = (0.8237112260402019, 0.6751863684771033)
+(wavg_pren_tsvd, wavg_recn_tsvd) = (0.8137761325828681, 0.6766063187788427)
+(wavg_pren_sma, wavg_recn_sma) = (0.8138551670063842, 0.6788545734232635)
+(wavg_pren_hals, wavg_recn_hals) = (0.8286141526216019, 0.4490592829
 
 # Hierarchical clustering after normalization : hc_h=300
-method = :hclust; normalization = true; clnoc = gtnoc+2
+method = :hclust; normalization = true; clnoc = gtnoc
 nepmt = 1 # looks diterministic (no statistic)
 hc_h=nothing; hc_linkage=:average
 
@@ -84,24 +239,29 @@ for hc_linkage in [:complete, :average]
         @show clnoc, hc_linkage, hc_h
         # Clustering after normalization (PCB)
         #gridsearch_params(Wpcbn, label, [1e-1, 1e-2, 1e-3, 1e-4, 1e-5], [1,2,3])
-        pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren, wavg_recn, precisionssn, recallssn, clustsn =
+        pre_meansn, pre_stdsn, rec_meansn, rec_stdsn, wavg_pren, wavg_recn, precisionssn, recallssn, rstsn, clustsn =
             clustring_experi(method, Wpcb, label, label_counts; noc=clnoc, normalization=normalization,
                             nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
 
         # Clustering after normalization (TSVD)
         pre_meansn_tsvd, pre_stdsn_tsvd, rec_meansn_tsvd, rec_stdsn_tsvd, wavg_pren_tsvd, wavg_recn_tsvd,
-            precisionssn_tsvd, recallssn_tsvd, clustsn_tsvd = clustring_experi(method, Wtsvd, label, label_counts;
+            precisionssn_tsvd, recallssn_tsvd, rstsn_tsvd, clustsn_tsvd = clustring_experi(method, Wtsvd, label, label_counts;
             noc=clnoc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
 
         # Clustering after normalization (SMA)
         pre_meansn_sma, pre_stdsn_sma, rec_meansn_sma, rec_stdsn_sma, wavg_pren_sma, wavg_recn_sma,
-            precisionssn_sma, recallssn_sma, clustsn_sma = clustring_experi(method, Wsma, label, label_counts;
+            precisionssn_sma, recallssn_sma, rstsn_tsvd, clustsn_sma = clustring_experi(method, Wsma, label, label_counts;
             noc=clnoc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
 
         # Clustering after normalization (HALS)
         pre_meansn_hals, pre_stdsn_hals, rec_meansn_hals, rec_stdsn_hals, wavg_pren_hals, wavg_recn_hals,
-            precisionssn_hals, recallssn_hals, clustsn_hals = clustring_experi(method, Whals, label, label_counts;
+            precisionssn_hals, recallssn_hals, rstsn_tsvd, clustsn_hals = clustring_experi(method, Whals, label, label_counts;
             noc=clnoc, normalization=normalization, nepmt=nepmt, hc_linkage=hc_linkage, hc_h=hc_h)
+
+        ami(ilabel, clustsn[1])
+        ami(ilabel, clustsn_tsvd[1])
+        ami(ilabel, clustsn_sma[1])
+        ami(ilabel, clustsn_hals[1])
 
         @show wavg_pren, wavg_recn
         @show wavg_pren_tsvd, wavg_recn_tsvd
@@ -112,7 +272,7 @@ for hc_linkage in [:complete, :average]
         save(joinpath(subworkpath,dataset,"Pre_aftr_nor_$(method)_noc$(clnoc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt)_wHALS.png"),f,px_per_unit=2)
         f = plot_qm4(rec_meansn, rec_meansn_tsvd, rec_meansn_sma, rec_meansn_hals, rec_stdsn, rec_stdsn_tsvd, rec_stdsn_sma, rec_stdsn_hals, label, label_counts; ylabel="recalls")
         save(joinpath(subworkpath,dataset,"Rec_aftr_nor_$(method)_noc$(clnoc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt)_wHALS.png"),f,px_per_unit=2)
-        save(joinpath(subworkpath,dataset,"aftr_nor_$(method)_noc$(clnoc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt).jld2"),
+        save(joinpath(subworkpath,dataset,"aftr_nor_$(method)_noc$(clnoc)_lkg$(hc_linkage)_h$(hc_h)_ne$(nepmt)_090925.jld2"),
             "pre_meansn", pre_meansn, "pre_meansn_tsvd", pre_meansn_tsvd, "pre_meansn_sma", pre_meansn_sma, "pre_meansn_hals", pre_meansn_hals,
             "pre_stdsn", pre_stdsn, "pre_stdsn_tsvd", pre_stdsn_tsvd, "pre_stdsn_sma", pre_stdsn_sma,"pre_stdsn_hals", pre_stdsn_hals,
             "rec_meansn", rec_meansn, "rec_meansn_tsvd", rec_meansn_tsvd, "rec_meansn_sma", rec_meansn_sma, "rec_meansn_hals", rec_meansn_hals,
@@ -125,12 +285,10 @@ for hc_linkage in [:complete, :average]
 end
 end
 for clnoc in [gtnoc, gtnoc+2]
-    for hc_linkage in [:average, :complete]
-        dd = load(joinpath(subworkpath,dataset,"aftr_nor_hclust_noc$(clnoc)_lkg$(hc_linkage)_hnothing_ne1.jld2"))
-        pres = map(v->round(v,sigdigits=4), [dd["wavg_pren"], dd["wavg_pren_tsvd"], dd["wavg_pren_sma"], dd["wavg_pren_hals"]])
-        recs = map(v->round(v,sigdigits=4), [dd["wavg_recn"], dd["wavg_recn_tsvd"], dd["wavg_recn_sma"], dd["wavg_recn_hals"]])
-        @show pres, recs
-    end
+    dd = load(joinpath(subworkpath,dataset,"aftr_nor_hclust_noc$(clnoc)_lkg$(hc_linkage)_hnothing_ne1.jld2"))
+    pres = map(v->round(v,sigdigits=4), [dd["wavg_pren"], dd["wavg_pren_tsvd"], dd["wavg_pren_sma"], dd["wavg_pren_hals"]])
+    recs = map(v->round(v,sigdigits=4), [dd["wavg_recn"], dd["wavg_recn_tsvd"], dd["wavg_recn_sma"], dd["wavg_recn_hals"]])
+    @show pres, recs
 end
 
 # Bootstrap clustering before normalization
@@ -215,6 +373,7 @@ save(joinpath(subworkpath,dataset,"aftr_nor_$(method)_p$(bs_pvalue)_nr$(bs_nresa
     "rec_stdsn", rec_stdsn, "rec_stdsn_tsvd", rec_stdsn_tsvd, "rec_stdsn_sma", rec_stdsn_sma, "rec_stdsn_hals", rec_stdsn_hals,
     "clustsn", clustsn, "clustsn_tsvd", clustsn_tsvd, "clustsn_sma", clustsn_sma, "clustsn_hals", clustsn_hals,
     "label", label, "label_counts", label_counts)
+
 
 # kmeans clustering after normalization : hc_h=300, gc_n_classes=40)
 method = :kmeans; normalization = true; nepmt = 20; km_maxiter = 100
