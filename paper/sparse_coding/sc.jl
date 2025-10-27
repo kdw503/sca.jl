@@ -142,39 +142,37 @@ for λ in [3.0]
 end
 
 #================== Other Sparsity Methods =========================#
-# PCB
-prefix = "pcb"
-noc = ncs; nac = 0
 
 dd = load(joinpath(subworkpath, "X_whitened_Hspar","natural_SC_l3.0_iter50.jld2"))
 sD = dd["D"]; αs = dd["αs"]
 
 dallinit = Dict{String,Tuple}()
-for initmethod in [:isvd, :BPDN]
+for initmethod in [:isvd, :BPDN, :sbc]
     @show initmethod
     initmtd = initmethod == :nndsvd ? initmethod : :isvd
     rt1 = @elapsed U, Vt, M0, N0, Wp, Hp, D = LCSVD.initpcb(X_whitened, noc, nac; initmethod=initmtd, svdmethod=:isvd)
-    V = copy(Vt'); N0t = copy(N0')
+    V = copy(Vt')
     if initmethod == :BPDN
         LCSVD.balanceWH!(sD,αs)
         M0, N0 = (U'sD, αs*Vt')
     elseif initmethod == :sbc
         try
-            rt11 = @elapsed M0 = sbc(U)
+            rt11 = @elapsed N0t = sbc(V)
         catch e
-            save(joinpath(resultpath,"sbc_error$(iter).jld2"),"U",W0)
+            save(joinpath(resultpath,"sbc_error$(iter).jld2"),"V",V)
             error("SBC failed with error: $(e)")
         end
-        rt12 = @elapsed N0 = M0\D
+        N0 = copy(N0t')
+        rt12 = @elapsed M0 = D/N0
         rt13 = @elapsed LCSVD.balanceWH!(M0, N0)
     end
     Winit, Hinit = U*M0, N0*Vt
     fv = LCSVD.fitd(X_whitened,Winit*Hinit)
-    Esym = norm(M0*N0t'-D)^2
+    Esym = norm(M0*N0-D)^2
     Esw = norm(Winit,1); Esh = norm(Hinit,1) # Esh includes balanced power
     LCSVD.normalizeW!(Winit,Hinit)
     Sw = norm(Winit,1); Sh = norm(Hinit,1) # Sh includes whole power
-    V = copy(Vt'); N0t = copy(N0')
+    N0t = copy(N0')
     initmethod == :isvd && (dallinit["SVD"] = (U, Vt, D))
     dallinit[String(initmethod)] = (Winit, Hinit, M0, N0t, fv, Esym, Esw, Esh, Sw, Sh)
     imsave_data(dataset,joinpath(subworkpath,"$(initmethod)_f$(fv)_Esw$(Esw)_Esh$(Esh).png"),Winit,Hinit,imgsz,lengthT; saveH=false)
@@ -195,17 +193,33 @@ for initmethod in [:BPDN, :isvd]
     end
 end
 
+
+# PCB
+prefix = "pcb"
+noc = ncs; nac = 0
+
+X_mean = mean(X, dims=2)
+X_centered = X .- X_mean
+covariance = cov(X_centered')
+U, S, _ = svd(covariance)
+epsilon = 1e-5
+X_whitened = U * Diagonal(1 ./ sqrt.(S .+ epsilon)) * U' * X_centered
+
+dd = load(joinpath(subworkpath,"allinit.jld2"))
+U, Vt, D = dd["SVD"]; V = Vt'
+
+αpowrng = -5:0.5:3
 for initmethod in [:BPDN, :isvd]
     @show initmethod
     Winit, Hinit, M0, N0t, _ = dd[String(initmethod)]
     Es = []; Esyms = []; L1hs = []; Eshs = []
-    for αpow in [-7:1:5] # [1e-5]
+    for αpow in αpowrng # [1e-5]
         @show αpow
         α = 10.0^αpow
         β1 = β2 = β = 0; α1 = 0; α2 = α# sparse coding
         β1vec = fill(β1,noc); β2vec = fill(β2,noc); β1vec[1] = 0.; β2vec[1] = 0.
         α1vec = fill(α1,noc); α2vec = fill(α2,noc); α1vec[1] = 0.; α2vec[1] = 0.
-        r=0.3; useprecond=false; uselv=false; optim_method = :sgd_injectnoise # :lbfgs
+        r=0.3; useprecond=false; uselv=false; optim_method = :lbfgs
         maxiter = 100#Int(ceil(log(eps(eltype(X_whitened)))/log(r))) #lcsvd_maxiter # 
         tol=1e-6; inner_tol = 1e-7; inner_maxiter = 1000#Int(ceil(2.5*ncs+350))# Int(ceil(0.75*ncs+100)) # 
         alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2,
@@ -218,23 +232,59 @@ for initmethod in [:BPDN, :isvd]
         rst1 = LCSVD.solve!(alg, X_whitened, U, V, D, M1, N1t; gtW=gtW, gtH=gtH);
         alg.show_trace = false; alg.store_trace = false; alg.store_inner_trace = false
         M1, N1t = copy(M0), copy(N0t)
-        rt2 = @elapsed LCSVD.solve!(alg, X_whitened, U, V, D, M1, N1t);
+        rt2 = 0. # @elapsed LCSVD.solve!(alg, X_whitened, U, V, D, M1, N1t);
 
         W1, H1 = rst1.W, rst1.Ht'
-        Esh = norm(H1,1)
+        L1h = norm(H1,1)
         LCSVD.normalizeW!(W1,H1); Sh = norm(W1,1)
         fv = LCSVD.fitd(X_whitened,W1*H1)
         Einit = rst1.traces[1].f_x; Eend = rst1.traces[end].f_x
-        Esym=norm(M1*N1t'-D)^2
+        Esym = rst1.traces[end].sympen
+        Esh = rst1.traces[end].sparseH
         fprex = "$(prefix)_$(initmethod)_$(optim_method)"
         #fprex = "$(prefix)_BPDN"
         regstr = alg.usecolparams ? "_avec($(α1vec[1]),$(α1vec[2]))_bvec($(β1vec[1]),$(β1vec[2]))" : "_aw$(α1)_ah$(α2)_b$(β)"
         fname = joinpath(subworkpath,"$(fprex)$(regstr)_Einit$(Einit)_Eend$(Eend)_Esy,$(Esym)_Esh$(Esh)_f$(fv)_Sh$(Sh)_it$(rst1.niters)_rt$(rt2)")
-        imsave_data(dataset,fname,W1,H1,imgsz,lengthT; saveH=false)
-        Xest = W1*H1; mse = norm(X_whitened[:,1:72]-Xest[:,1:72])^2/length(X_whitened[:,1:72])
-        imsave_data(dataset,joinpath(subworkpath,"$(fprex)$(regstr)_mse$(mse)_Xest1to72.png"),Xest[:,1:72],Xest[1:72,:],imgsz,lengthT; saveH=false)
+        imsave_data(dataset,fname,W1,H1,imgsz,lengthT; saveH=true)
+        # Xest = W1*H1; mse = norm(X_whitened[:,1:72]-Xest[:,1:72])^2/length(X_whitened[:,1:72])
+        # imsave_data(dataset,joinpath(subworkpath,"$(fprex)$(regstr)_mse$(mse)_Xest1to72.png"),Xest[:,1:72],Xest[1:72,:],imgsz,lengthT; saveH=false)
+        push!(Es, Eend)
+        push!(Esyms, Esym)
+        push!(L1hs, L1h)
+        push!(Eshs, Esh)
     end
+    save(joinpath(subworkpath,"$(prefix)_$(initmethod)_penalties.jld2"),
+        "Es", Es, "Esyms", Esyms, "L1hs", L1hs, "Eshs", Eshs)
 end
+
+ddbpdn = load(joinpath(subworkpath,"$(prefix)_BPDN_penalties.jld2"))
+ddisvd = load(joinpath(subworkpath,"$(prefix)_isvd_penalties.jld2"))
+
+f = Figure()
+ax = AMakie.Axis(f[1,1], xlabel="α", ylabel="Total penalty", xscale=log10)
+lines!(ax, 10.0 .^ collect(αpowrng), ddbpdn["Es"], label="BPDN")
+lines!(ax, 10.0 .^ collect(αpowrng), ddisvd["Es"], label="ISVD")
+axislegend(ax,position=:rb)
+save(joinpath(subworkpath,"$(prefix)_alpha_vs_Es.png"),f)
+f = Figure()
+ax = AMakie.Axis(f[1,1], xlabel="α", ylabel="Sym penalty", xscale=log10)
+lines!(ax, 10.0 .^ collect(αpowrng), ddbpdn["Esyms"], label="BPDN")
+lines!(ax, 10.0 .^ collect(αpowrng), ddisvd["Esyms"], label="ISVD")
+axislegend(ax,position=:rb)
+save(joinpath(subworkpath,"$(prefix)_alpha_vs_Esyms.png"),f)
+f = Figure()
+ax = AMakie.Axis(f[1,1], xlabel="α", ylabel="Sparsity H penalty", xscale=log10)
+lines!(ax, 10.0 .^ collect(αpowrng), ddbpdn["Eshs"], label="BPDN")
+lines!(ax, 10.0 .^ collect(αpowrng), ddisvd["Eshs"], label="ISVD")
+axislegend(ax,position=:rb)
+save(joinpath(subworkpath,"$(prefix)_alpha_vs_Eshs.png"),f)
+f = Figure()
+ax = AMakie.Axis(f[1,1], xlabel="α", ylabel="L1 norm H", xscale=log10)
+lines!(ax, 10.0 .^ collect(αpowrng), ddbpdn["L1hs"], label="BPDN")
+lines!(ax, 10.0 .^ collect(αpowrng), ddisvd["L1hs"], label="ISVD")
+axislegend(ax,position=:rt)
+save(joinpath(subworkpath,"$(prefix)_alpha_vs_L1hs.png"),f)
+
 
 # SCA : Sparse Component Analysis (sparsity is applied to only H(Y')) + maximize(∥Z'XY∥₂)
 using RCall
