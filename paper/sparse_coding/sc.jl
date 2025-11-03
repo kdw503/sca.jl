@@ -159,7 +159,7 @@ for initmethod in [:isvd, :BPDN, :sbc]
         try
             rt11 = @elapsed N0t = sbc(V)
         catch e
-            save(joinpath(resultpath,"sbc_error$(iter).jld2"),"V",V)
+            save(joinpath(subworkpath,"sbc_error.jld2"),"V",V)
             error("SBC failed with error: $(e)")
         end
         N0 = copy(N0t')

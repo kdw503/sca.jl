@@ -17,7 +17,7 @@ imgsz = (40,20); lengthT = 1000; prefix = "pcb"; num_experiments=10000
 maskth=0.25; maskW=rand(imgsz...).<maskth; maskW = vec(maskW); maskH=rand(lengthT).<maskth;
 subtract_bg = false
 
-for dataset in [:fakecells, :neurofinder_small, :cbclface, :pcrnaseq]
+for dataset in [:cbclface] # :fakecells, :neurofinder_small, , :pcrnaseq
     @show dataset
     X, imsz, lhT, noc, gtnoc, datadic = load_data(dataset; sigma=5.0, imgsz=imgsz, lengthT=lengthT,
             SNR=SNR, bias=0.1, useCalciumT=true, inhibitindices=0, issave=false, isload=false,
@@ -38,7 +38,9 @@ for dataset in [:fakecells, :neurofinder_small, :cbclface, :pcrnaseq]
 
     useprecond = false; usedenoiseUVt = false; uselv = false
     r=0.3; maxiter = 100; sbc_maxiter = dataset == :pcrnaseq ? 1000 : 100
+    σ0rng = [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.]
     for initmethod in [:sbc, :tsvd]
+        @show initmethod
         (tailstr,α,β) = ("_sp",0.005,0.)
         fprex = dataset == :fakecells ? "$(dataset)$(SNR)db_$(initmethod)" : "$(dataset)_$(initmethod)"
 
@@ -70,10 +72,14 @@ for dataset in [:fakecells, :neurofinder_small, :cbclface, :pcrnaseq]
         imsave_data(dataset,pathfname,Wp1,Hp1,imsz,100; saveH=false, verbose=false, w_limit_factor=0.01, h_limit_factor=0.9)
 
         V = copy(H0'); N0t = copy(N0')
+
+    fvs = []; L1nws = []; iters = []; rts = []
+    for σ0 in σ0rng
+        @show σ0
         tol=1e-6; inner_tol = 1e-6; inner_maxiter = 1000#Int(ceil(2.5*ncs+350))# Int(ceil(0.75*ncs+100)) # 
-        alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2,
+        alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2, σ0=σ0,
             #α1vec=α1vec, α2vec=α2vec, β1vec=β1vec, β2vec=β2vec,
-            r=r, useprecond=useprecond, usedenoiseUVt=usedenoiseUVt, maskW = Colon(), maskH = Colon(), optim_method= :sgd_injectnoise,
+            r=r, useprecond=useprecond, usedenoiseUVt=usedenoiseUVt, maskW = Colon(), maskH = Colon(), optim_method= :lbfgs,
             denoisefilter=:avg, uselv=uselv, imgsz=imsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = false,
             store_inner_trace = false, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
             f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0, ur=0.002, nr=0.001);
@@ -96,11 +102,47 @@ for dataset in [:fakecells, :neurofinder_small, :cbclface, :pcrnaseq]
             fv = LCSVD.fitd(X,W1*H1)
         end
         fpstx = "it$(rst0.niters)_rt$(rt2)"
-        fname = dataset ∈ [:fakecells, :neurofinder_small] ? "$(fprex)_a$(α)_b$(β)_af$(fv)_sW$(sparsityW)_$(fpstx)" :
-                                                             "$(fprex)_a$(α)_b$(β)_f$(fv)_sW$(sparsityW)_$(fpstx)"
+        fname = dataset ∈ [:fakecells, :neurofinder_small] ? "$(fprex)_a$(α)_b$(β)_σ0$(σ0)af$(fv)_sW$(sparsityW)_$(fpstx)" :
+                                                             "$(fprex)_a$(α)_b$(β)_σ0$(σ0)_f$(fv)_sW$(sparsityW)_$(fpstx)"
         pathfname = joinpath(subworkpath,fname)
         #imsave_data(dataset,fname,W3,H3,imsz,100; saveH=false)
         imsave_data(dataset,pathfname,W1,H1,imsz,100; saveH=false, verbose=false, w_limit_factor=0.01, h_limit_factor=0.9)
-        @show dataset, initmethod, avgfit, rt2
+        push!(fvs, fv)
+        push!(L1nws, sparsityW)
+        push!(iters, rst0.totalniters)
+        push!(rts, rt2)
     end
+       save(joinpath(subworkpath,"$(initmethod)_quant.jld2"),"fvs",fvs,"L1nws",L1nws,"iters",iters,"rts",rts)
+    end
+
+    ddtsvd = load(joinpath(subworkpath,"tsvd_quant.jld2"))
+    ddsbc = load(joinpath(subworkpath,"sbc_quant.jld2"))
+
+    f = Figure()
+    ax = AMakie.Axis(f[1,1], xlabel="σ0", ylabel="Fit value", xscale=log10)
+    lines!(ax, σ0rng, ddsbc["fvs"], label="SBC")
+    lines!(ax, σ0rng, ddtsvd["fvs"], label="TSVD")
+    axislegend(ax,position=:rb)
+    save(joinpath(subworkpath,"$(dataset)_sigma0_vs_fvs.png"),f)
+
+    f = Figure()
+    ax = AMakie.Axis(f[1,1], xlabel="σ0", ylabel="L1 norm of W", xscale=log10)
+    lines!(ax, σ0rng, ddsbc["L1nws"], label="SBC")
+    lines!(ax, σ0rng, ddtsvd["L1nws"], label="TSVD")
+    axislegend(ax,position=:rb)
+    save(joinpath(subworkpath,"$(dataset)_sigma0_vs_L1nws.png"),f)
+
+    f = Figure()
+    ax = AMakie.Axis(f[1,1], xlabel="σ0", ylabel="total iterations", xscale=log10)
+    lines!(ax, σ0rng, ddsbc["iters"], label="SBC")
+    lines!(ax, σ0rng, ddtsvd["iters"], label="TSVD")
+    axislegend(ax,position=:rb)
+    save(joinpath(subworkpath,"$(dataset)_sigma0_vs_iters.png"),f)
+
+    f = Figure()
+    ax = AMakie.Axis(f[1,1], xlabel="σ0", ylabel="Runtime", xscale=log10)
+    lines!(ax, σ0rng, ddsbc["rts"], label="SBC")
+    lines!(ax, σ0rng, ddtsvd["rts"], label="TSVD")
+    axislegend(ax,position=:rb)
+    save(joinpath(subworkpath,"$(dataset)_sigma0_vs_rts.png"),f)
 end

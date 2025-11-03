@@ -1,8 +1,0 @@
-#!/bin/bash
-# export resource='select[model==Intel_Xeon_Gold6242CPU280GHz && mem>64000 && tmp>2] rusage[mem=64000, tmp=2]'
-# smjuliajob -R "$resource" $MYSTORAGE/work/julia/sca/paper/rnaseq/expr1
-# julia         file             dir_name methods num_expriments SNR factor ncells lcsvd_maxiter hals_maxiter hals_α compnmf_maxiter
-
-export jlexec=/usr/local/julia/bin/julia
-export jlfile=$MYSTORAGE/work/julia/sca/paper/rnaseq/X_Xt/runtime_pcb_X_Xt1.jl
-$jlexec $jlfile \"WMB-10Xv2-HY\" 0 500 0 0.005 0.005 5.0 5.0 0
