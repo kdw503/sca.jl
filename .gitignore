@@ -50,3 +50,4 @@ Manifest.toml
 Thumbs.db
 paper/compnmf/Lib
 paper/compnmf/Scripts
+expr*
