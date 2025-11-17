@@ -15,136 +15,84 @@ include(joinpath(workpath,"setup_light.jl"))
 include(joinpath(workpath,"setup_plot.jl"))
 include(joinpath(workpath,"utils.jl"))
 
-dataset = :natural
+#========= stochastic gradient descent with fakecells image ==========#
+dataset = :fakecells; SNR=0; inhibitindices=[]; bias=0.1
 filter = dataset ∈ [] ? :meanT : :none; filterstr = "_$(filter)"
 datastr = dataset == :fakecells ? "_fc$(inhibitindices)_$(SNR)dB" : "_$(dataset)"
-X, imgsz, lengthT, ncs, _ = load_data(dataset)
-patch_size = imgsz[1]
+
+imgsz0 = (40,20); factor = 1
+sqfactor = Int(floor(sqrt(factor)))
+bias = 0.1
+
+@show bias; flush(stdout)
+imgsz = (sqfactor*imgsz0[1],sqfactor*imgsz0[2]); lengthT = factor*1000; sigma = sqfactor*5.0
+X, imgsz, lengthT, ncs, gtncs, datadic = load_data(dataset; dpath=subworkpath, sigma=sigma, imgsz=imgsz,
+        lengthT=lengthT, SNR=SNR, bias=bias, useCalciumT=true, inhibitindices=inhibitindices, issave=true,
+        isload=true, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
 (m,n,p) = (size(X)...,ncs)
 gtW, gtH = dataset == :fakecells ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
 
-using Images, Statistics, LinearAlgebra, FileIO, ImageView, Random, TestImages
-
-#=
-# Load grayscale image and convert to array
-# img = testimage("lena_gray_256.tif")
-# img_array = Float64.(channelview(img))
-
-# --- Extract Patches ---
-function extract_patches(img, patch_size)
-    patches = []
-    for i in 1:patch_size:(size(img, 2) - patch_size)
-        for j in 1:patch_size:(size(img, 1) - patch_size)
-            patch = img[j:j+patch_size-1, i:i+patch_size-1]
-            push!(patches, vec(patch))
-        end
-    end
-    hcat(patches...)  # each column is a patch
-end
-function extract_patches(img, patch_size)
-    patches = []
-    for i in 1:patch_size:(size(img, 2) - patch_size)
-        for j in 1:patch_size:(size(img, 1) - patch_size)
-            patch = img[j:j+patch_size-1, i:i+patch_size-1]
-            push!(patches, vec(patch))  # <--- FLATTEN PATCH!
-        end
-    end
-    return hcat(patches...)  # Each column is a patch
+subtract_bg = false
+sbgstr = subtract_bg ? "sbg" : "nosbg"
+if subtract_bg
+    rt1cd = @elapsed W, H = NMF.nndsvd(X, 1, variant=:ar) # rank 1 NMF
+    NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=60, α=0), X, W, H)
+    bg = W*fill(mean(H),1,n)
+    X .-= bg
 end
 
-# patch_size = 12
-# X = extract_patches(img_array, patch_size)
-=#
+noc = ncs; nac = 0; initmethod = :isvd
+rt1 = @elapsed U, Vt, M0, N0, Wp, Hp, D = LCSVD.initpcb(X, noc, nac; initmethod=initmethod, svdmethod=:isvd)
+V = copy(Vt'); N0t = copy(N0')
 
-# --- Whitening ---
-X_mean = mean(X, dims=2)
-X_centered = X .- X_mean
-covariance = cov(X_centered')
-U, S, _ = svd(covariance)
-epsilon = 1e-5
-X_whitened = U * Diagonal(1 ./ sqrt.(S .+ epsilon)) * U' * X_centered
-# imsave_data(dataset,joinpath(subworkpath,"X_whitened1to72.png"),X_whitened[:,1:72],X_whitened[1:72,:],imgsz,lengthT; saveH=false)
+ur = 1e-3; nr = 0.01
+for (ur,nr) in [(1e-3,1e-3),(1e-3,5e-3),(1e-3,1e-2),(2e-3,1e-3),(2e-3,5e-3),(2e-3,1e-2),(3e-3,1e-3),(3e-3,5e-3),(3e-3,1e-2),(1e-3,0.0001)]
+β1 = β2 = β = 0; α1 = α2 = 0.005
+r=0.3; useprecond=false; uselv=false
+maxiter = 50#Int(ceil(log(eps(eltype(X_whitened)))/log(r))) #lcsvd_maxiter # 
+tol=1e-6; inner_tol = 1e-6; inner_maxiter = 1000#Int(ceil(2.5*ncs+350))# Int(ceil(0.75*ncs+100)) #
+optim_method = :sgd_injectnoise; smaxiter = 200 # for sgd
+alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2,
+    #α1vec=α1vec, α2vec=α2vec, β1vec=β1vec, β2vec=β2vec,
+    r=r, useprecond=useprecond, usedenoiseUVt=false, optim_method=optim_method, smaxiter = smaxiter,
+    denoisefilter=:avg, uselv=false, imgsz=imgsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
+    store_inner_trace = false, show_trace = true, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
+    f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0, ur=ur, nr=nr); # ur=0.00001, nr=0.001
+M1, N1t = copy(M0), copy(N0t)
+rst1 = LCSVD.solve!(alg, X, U, V, D, M1, N1t; gtW=gtW, gtH=gtH);
 
-# --- Visualize Sample Whitened Patches ---
-function show_patches(X, patch_size, num_patches=25)
-    cols = trunc(Int, sqrt(num_patches))
-    rows = ceil(Int, num_patches / cols)
-    canvas = fill(0.5, patch_size*rows, patch_size*cols)
+W1, H1 = rst1.W, rst1.Ht'
+L1h = norm(H1,1)
+fv = LCSVD.fitd(X,W1*H1)
+Einit = rst1.traces[1].f_x; Eend = rst1.traces[end].f_x
+Esym = rst1.traces[end].sympen
+Esh = rst1.traces[end].sparseH
+LCSVD.normalizeWH!(W1,H1); norm1nH = norm(H1,1)
+fprex = "$(prefix)_$(dataset)_$(initmethod)_$(optim_method)_intol$(inner_tol)"
+#fprex = "$(prefix)_BPDN"
+regstr = alg.usecolparams ? "_avec($(α1vec[1]),$(α1vec[2]))_bvec($(β1vec[1]),$(β1vec[2]))" :
+            optim_method == :lbfgs ? "_aw$(α1)_ah$(α2)_b$(β)" :
+            optim_method == :sgd_injectnoise ? "_aw$(α1)_ah$(α2)_b$(β)_ur$(alg.ur)_nr$(alg.nr)" : "_aw$(α1)_ah$(α2)_b$(β)"
+fname = joinpath(subworkpath,"$(fprex)$(regstr)_Einit$(Einit)_Eend$(Eend)_Esy$(Esym)_Esh$(Esh)_nH$(norm1nH)_f$(fv)_it$(rst1.niters)_rt$(rt2)")
+imsave_data(dataset,fname,W1,H1,imgsz,lengthT; saveH=false)
+#imsave_data(dataset,fname*"_c",W1,H1,imgsz,200; saveH=true, signedcolors=TestData.g1wm())
 
-    for idx in 1:num_patches
-        i = div(idx - 1, cols)
-        j = (idx - 1)%cols
-        patch = reshape(X[:, idx], patch_size, patch_size)
-        canvas[i*patch_size+1:(i+1)*patch_size, j*patch_size+1:(j+1)*patch_size] = patch
-    end
-    imdic, imshow(canvas, name="Whitened Patches")
-    canvas, imdic 
 end
 
-# Show 25 whitened patches
-show_patches(X_whitened, patch_size, 25)
-
-
-#================== Sparse Coding via ISTA =========================#
-function soft_threshold(x, λ)
-    return sign.(x) .* max.(abs.(x) .- λ, 0)
-end
-
-function ista(D, x, λ; max_iter=100, lr=1e-1) # lr is 1/L, where L < 1 is Lipschitz constant
-    α = zeros(size(D, 2))
-    for _ in 1:max_iter
-        grad = D' * (D * α - x)
-        α = soft_threshold(α - lr * grad, λ * lr)
-    end
-    return α
-end
-function init_dictionary(X, K)
-    D = X[:, rand(1:end, K)]
-    D ./= sqrt.(sum(D .^ 2, dims=1))  # Normalize columns
-    return D
-end
-function sparse_coding(X, K, λ; n_iter=10)
-    D = init_dictionary(X, K)
-    N = size(X, 2)
-    αs = zeros(K, N) # H
-
-    for iter in 1:n_iter
-        println("Iteration $iter")
-
-        # Sparse coding step (fix D, update α) (H)
-        for i in 1:N
-            αs[:, i] = ista(D, X[:, i], λ)
-        end
-
-        # Dictionary update step (fix α, update D) (W)
-        for k in 1:K
-            idx = findall(!=(0), αs[k, :])
-            if !isempty(idx)
-                Rk = X[:, idx] - D * αs[:, idx] + D[:, k] * αs[k, idx]'
-                D[:, k] = Rk * αs[k, idx]
-                D[:, k] /= norm(D[:, k])
-            end
-        end
-    end
-    return D, αs
-end
-K = ncs  # Number of atoms
-λ = 3.0 # Sparsity regularization
-for λ in [3.0]
-    for maxiter in [50]
-        @show λ, maxiter
-        rt = @elapsed D, αs = sparse_coding(X_whitened, K, λ, n_iter=maxiter)
-        # img, _ = show_patches(D, patch_size, 64);
-        fprefix = joinpath(subworkpath, "natural_SC_dotinit_l$(λ)_iter$(maxiter)")
-        imsave_data(dataset,fprefix,D,αs,imgsz,lengthT)
-        save(fprefix*".jld2", "D", D, "αs", αs, "imgsz", imgsz, "lengthT", lengthT, "rt", rt)
-    end
-end
-
-#================== Other Sparsity Methods =========================#
+#========= sparse coding with natural images =============#
+dataset = :natural
+imgsz = (12,12); lengthT = 100000; noc = ncs = 72; nac = 0
+patch_size = imgsz[1]
 
 dd = load(joinpath(subworkpath, "X_whitened_Hspar","natural_SC_l3.0_iter50.jld2"))
-sD = dd["D"]; αs = dd["αs"]
+sD = dd["D"]; αs = dd["αs"]; X_whitened = dd["X_whitened"]
+# fv = LCSVD.fitd(X_whitened,sD*αs)
+# LCSVD.normalizeWH!(sD,αs); norm1nH = norm(αs,1)
+# fname = joinpath(subworkpath,"BPDN_nH$(norm1nH)_f$(fv)")
+# imsave_data(dataset,fname,sD,αs,imgsz,lengthT; saveH=false)
+# imsave_data(dataset,fname*"_c",sD,αs,imgsz,200; saveH=true, signedcolors=TestData.g1wm())
+# dd = load(joinpath(subworkpath, "X_whitened_Hspar","natural_SC_l3.0_iter50.jld2"))
+# sD = dd["D"]; αs = dd["αs"]; X_whitened = dd["X_whitened"]
 
 dallinit = Dict{String,Tuple}()
 for initmethod in [:isvd, :BPDN, :sbc]
@@ -181,9 +129,16 @@ save(joinpath(subworkpath,"allinit.jld2"),dallinit)
 
 dd = load(joinpath(subworkpath,"allinit.jld2"))
 U, Vt, D = dd["SVD"]; V = Vt'
-for initmethod in [:BPDN, :isvd]
+for initmethod in [:BPDN, :isvd, :sbc]
     Winit, Hinit, M0, N0t, fv, Esym, Esw, Esh, Sw, Sh = dd[String(initmethod)]
+    LCSVD.normalizeW!(Hinit',Winit')
+    Sw = norm(Winit,1); Sh = norm(Hinit,1) # Sw includes whole power
     @show initmethod, fv, Esym, Esh, Sh, norm(M0,2)
+    LCSVD.normalizeWH!(Winit,Hinit)
+    imsave_data(dataset,joinpath(subworkpath,"$(initmethod)_f$(fv)_Esym$(Esym)_Esh$(Esh)_Esh$(Esh)"),
+            Winit,Hinit,imgsz,lengthT; saveH=false)
+    imsave_data(dataset,joinpath(subworkpath,"$(initmethod)_f$(fv)_Esym$(Esym)_Esh$(Esh)_Esh$(Esh)_c"),
+            Winit,Hinit,imgsz,200; saveH=true, signedcolors=TestData.g1wm())
     for α in [1e-5,0.005]
         alg = LCSVD.LinearCombSVD(α1=0., α2=α, β1=0., β2=0.)
         state = LCSVD.prepare_state(U, V, M0, N0t, alg)
@@ -196,56 +151,57 @@ end
 
 # PCB
 prefix = "pcb"
-noc = ncs; nac = 0
-
-X_mean = mean(X, dims=2)
-X_centered = X .- X_mean
-covariance = cov(X_centered')
-U, S, _ = svd(covariance)
-epsilon = 1e-5
-X_whitened = U * Diagonal(1 ./ sqrt.(S .+ epsilon)) * U' * X_centered
+dataset = :natural; noc = 72; nac = 0; imgsz=(12,12); lengthT = 100000
 
 dd = load(joinpath(subworkpath,"allinit.jld2"))
+X_whitened = dd["X_whitened"][1]
 U, Vt, D = dd["SVD"]; V = Vt'
+(m,n,p) = (size(X_whitened)...,ncs); imgsz = (12,12)
+gtW, gtH = (Matrix{eltype(X_whitened)}(undef,0,0),Matrix{eltype(X_whitened)}(undef,0,0))
 
-αpowrng = -5:0.5:3
-for initmethod in [:BPDN, :isvd]
+for initmethod in [:BPDN,:isvd,:sbc]
     @show initmethod
     Winit, Hinit, M0, N0t, _ = dd[String(initmethod)]
     Es = []; Esyms = []; L1hs = []; Eshs = []
-    for αpow in αpowrng # [1e-5]
-        @show αpow
-        α = 10.0^αpow
+    for (α, ur, nr, optim_method) in [(0.1, 5e-3, 0.3, :sgd), (0.1, 1e-2, 0.3, :sgd), (0.1, 5e-2, 0.3, :sgd), (0.1, 1e-1, 0.3, :sgd),
+                                    (0.1, 5e-3, 0.1, :sgd), (0.1, 1e-2, 0.1, :sgd), (0.1, 5e-3, 0.05, :sgd), (0.1, 1e-2, 0.05, :sgd)] # (0.01, :sgd_injectnoise), 
+        @show optim_method
+        # ur = 1e-3; nr = 1e-2 # :sgd_injectnoise
+        ur = ur; nr = nr # :sgd learning rate, batch size rate
         β1 = β2 = β = 0; α1 = 0; α2 = α# sparse coding
         β1vec = fill(β1,noc); β2vec = fill(β2,noc); β1vec[1] = 0.; β2vec[1] = 0.
         α1vec = fill(α1,noc); α2vec = fill(α2,noc); α1vec[1] = 0.; α2vec[1] = 0.
-        r=0.3; useprecond=false; uselv=false; optim_method = :lbfgs
-        maxiter = 100#Int(ceil(log(eps(eltype(X_whitened)))/log(r))) #lcsvd_maxiter # 
-        tol=1e-6; inner_tol = 1e-7; inner_maxiter = 1000#Int(ceil(2.5*ncs+350))# Int(ceil(0.75*ncs+100)) # 
+        r=0.3; useprecond=false; uselv=false
+        maxiter = 50#Int(ceil(log(eps(eltype(X_whitened)))/log(r))) #lcsvd_maxiter # 
+        tol=1e-6; inner_tol = 1e-6; inner_maxiter = 1000#Int(ceil(2.5*ncs+350))# Int(ceil(0.75*ncs+100)) #
+        smaxiter = 200 # for sgd
         alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2,
             #α1vec=α1vec, α2vec=α2vec, β1vec=β1vec, β2vec=β2vec,
-            r=r, useprecond=useprecond, usedenoiseUVt=false, optim_method=optim_method,
+            r=r, useprecond=useprecond, usedenoiseUVt=false, optim_method=optim_method, smaxiter = smaxiter,
             denoisefilter=:avg, uselv=false, imgsz=imgsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
             store_inner_trace = false, show_trace = true, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
-            f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0, ur=0.00001, nr=0.001);
+            f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0, ur=ur, nr=nr); # ur=0.00001, nr=0.001
         M1, N1t = copy(M0), copy(N0t)
-        rst1 = LCSVD.solve!(alg, X_whitened, U, V, D, M1, N1t; gtW=gtW, gtH=gtH);
+        rst1 = LCSVD.solve!(alg, X_whitened, U, V, D, M1, N1t; gtW=gtW, gtH=gtH, use_σ2_cal_pen=false);
         alg.show_trace = false; alg.store_trace = false; alg.store_inner_trace = false
         M1, N1t = copy(M0), copy(N0t)
         rt2 = 0. # @elapsed LCSVD.solve!(alg, X_whitened, U, V, D, M1, N1t);
 
         W1, H1 = rst1.W, rst1.Ht'
         L1h = norm(H1,1)
-        LCSVD.normalizeW!(W1,H1); Sh = norm(W1,1)
         fv = LCSVD.fitd(X_whitened,W1*H1)
         Einit = rst1.traces[1].f_x; Eend = rst1.traces[end].f_x
         Esym = rst1.traces[end].sympen
         Esh = rst1.traces[end].sparseH
-        fprex = "$(prefix)_$(initmethod)_$(optim_method)"
+        LCSVD.normalizeWH!(W1,H1); norm1nH = norm(H1,1)
+        fprex = "$(prefix)_$(initmethod)_$(optim_method)_intol$(inner_tol)"
         #fprex = "$(prefix)_BPDN"
-        regstr = alg.usecolparams ? "_avec($(α1vec[1]),$(α1vec[2]))_bvec($(β1vec[1]),$(β1vec[2]))" : "_aw$(α1)_ah$(α2)_b$(β)"
-        fname = joinpath(subworkpath,"$(fprex)$(regstr)_Einit$(Einit)_Eend$(Eend)_Esy,$(Esym)_Esh$(Esh)_f$(fv)_Sh$(Sh)_it$(rst1.niters)_rt$(rt2)")
-        imsave_data(dataset,fname,W1,H1,imgsz,lengthT; saveH=true)
+        regstr = alg.usecolparams ? "_avec($(α1vec[1]),$(α1vec[2]))_bvec($(β1vec[1]),$(β1vec[2]))" :
+                 optim_method == :lbfgs ? "_aw$(α1)_ah$(α2)_b$(β)" :
+                 optim_method == :sgd_injectnoise ? "_aw$(α1)_ah$(α2)_b$(β)_ur$(alg.ur)_nr$(alg.nr)" : "_aw$(α1)_ah$(α2)_b$(β)_ur$(alg.nr)_ur$(alg.nr)"
+        fname = joinpath(subworkpath,"$(fprex)$(regstr)_Einit$(Einit)_Eend$(Eend)_Esy$(Esym)_Esh$(Esh)_nH$(norm1nH)_f$(fv)_it$(rst1.niters)_rt$(rt2)")
+        imsave_data(dataset,fname,W1,H1,imgsz,lengthT; saveH=false)
+#        imsave_data(dataset,fname*"_c",W1,H1,imgsz,200; saveH=true, signedcolors=TestData.g1wm())
         # Xest = W1*H1; mse = norm(X_whitened[:,1:72]-Xest[:,1:72])^2/length(X_whitened[:,1:72])
         # imsave_data(dataset,joinpath(subworkpath,"$(fprex)$(regstr)_mse$(mse)_Xest1to72.png"),Xest[:,1:72],Xest[1:72,:],imgsz,lengthT; saveH=false)
         push!(Es, Eend)
@@ -253,8 +209,8 @@ for initmethod in [:BPDN, :isvd]
         push!(L1hs, L1h)
         push!(Eshs, Esh)
     end
-    save(joinpath(subworkpath,"$(prefix)_$(initmethod)_penalties.jld2"),
-        "Es", Es, "Esyms", Esyms, "L1hs", L1hs, "Eshs", Eshs)
+    # save(joinpath(subworkpath,"$(prefix)_$(initmethod)_penalties.jld2"),
+    #     "Es", Es, "Esyms", Esyms, "L1hs", L1hs, "Eshs", Eshs)
 end
 
 ddbpdn = load(joinpath(subworkpath,"$(prefix)_BPDN_penalties.jld2"))
@@ -571,3 +527,18 @@ for α in [1e-4]
     # Xest = W1*H1; mse = norm(X[:,1:72]-Xest[:,1:72])^2/length(X[:,1:72])
     # imsave_data(dataset,joinpath(subworkpath,"$(fprex)$(regstr)_mse$(mse)_Xest1to72.png"),Xest[:,1:72],Xest[1:72,:],imgsz,lengthT; saveH=false)
 end
+
+#===========================#
+    nc, noc = size(M0); lt = noc*nc
+    state = LCSVD.prepare_state(U, V, M0, N0t, alg)
+    updater = LCSVD.LinearCombSVDUpd{Float64}(D, state, noc, alg) # normalize parameters and prepare
+    xw = vec(state.M'); xh = vec(state.Nt')
+    zm = zeros(Float64,0,0)
+    fgh!, _ = LCSVD.prepare_fg_invert_whole(U, V, zm, zm, D, state, updater, alg)
+    fgh!(1, nothing, vcat(xw,xh))
+
+    use_σ2_cal_pen = true
+    pen_σw2 = use_σ2_cal_pen ? updater.σw2 : zero(typeof(updater.σw2))
+    pen_σh2 = use_σ2_cal_pen ? updater.σh2 : zero(typeof(updater.σh2))
+
+f_x, sympen, sparseW, sparseH, _ = LCSVD.penaltyMN(U, V, D, state, pen_σw2, pen_σh2, updater, alg)

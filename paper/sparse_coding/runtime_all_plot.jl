@@ -41,10 +41,9 @@ maskth=0.25; maskW=rand(imgsz...).<maskth; maskW = vec(maskW); maskH=rand(length
 tol=-1; maxiter = maxiter # Int(ceil(log(eps(eltype(X)))/log(r)))
 αrng = [1e-4]
 
-for (inner_maxiter, r) in [(10,0.3),(10,0.5),(10,0.99),
-                           (100,0.3),(100,0.5),(100,0.99),
-                           (1000,0.3),(1000,0.5),(1000,0.99), ]
-for maxiter in [20,30,50,100]
+for (inner_maxiter, r, maxiter) in [(10,0.3,100),(10,0.5,500),(10,0.99,4000),
+                           (100,0.3,100),(100,0.5,500),(100,0.99,4000),
+                           (1000,0.3,100),(1000,0.5,500),(1000,0.99,4000), ]
 subdirname = "innertol$(inner_tol)_inneriter$(inner_maxiter)_iter$(maxiter)_r$(r)"
 @show subdirname
 for α in αrng
@@ -85,7 +84,7 @@ end # for iter
 rt1avg = rt1s/nsuccess
 end # for α 
 end
-end
+
 
 include(joinpath(workpath,"setup_plot.jl"))
 using Interpolations
@@ -99,40 +98,71 @@ subdirnames = ["innertol1.0e-6_inneriter10_iter50_r0.3",
                "innertol1.0e-6_inneriter1000_iter50_r0.3",
                "innertol1.0e-6_inneriter1000_iter100_r0.5",
                "innertol1.0e-6_inneriter1000_iter4000_r0.99"
-              ]
+              ]; dataset = "fakecells"; αrng = [0.005]; num_experiments = 30
+subdirnames = ["innertol1.0e-7_inneriter10_iter50_r0.3",
+               "innertol1.0e-7_inneriter10_iter100_r0.5",
+               #"innertol1.0e-7_inneriter10_iter4000_r0.99",
+               "innertol1.0e-7_inneriter100_iter50_r0.3",
+               "innertol1.0e-7_inneriter100_iter100_r0.5",
+               "innertol1.0e-7_inneriter100_iter500_r0.5",
+               #"innertol1.0e-7_inneriter100_iter4000_r0.99",
+               #"innertol1.0e-7_inneriter1000_iter50_r0.3",
+               #"innertol1.0e-7_inneriter1000_iter100_r0.5",
+               "innertol1.0e-7_inneriter1000_iter4000_r0.99"
+              ]; dataset = "fakecells"; αrng = [0.005]; num_experiments = 30
+subdirnames = ["r0.3_ur0.001_nr0.01_itol1.0e-5_sit100_it50",
+#                "r0.3_ur0.001_nr0.01_itol1.0e-5_sit50_it50",
+#                "r0.3_ur0.001_nr0.01_itol1.0e-6_sit100_it100",
+#                "r0.3_ur0.001_nr0.01_itol1.0e-6_sit100_it50",
+#                "r0.3_ur0.001_nr0.01_itol1.0e-6_sit50_it50",
+               "r0.3_ur0.002_nr0.001_itol1.0e-6_iit1000_sit200_it50",
+               "r0.3_ur0.003_nr0.001_itol1.0e-6_iit1000_sit100_it50"
+              ]; dataset = "fakecells"; αrng = [0.005]; num_experiments = 30
+subdirnames = ["natural_r0.3_ur0.001_nr0.01_itol1.0e-6_sit100_it50"
+              ]; dataset = "natural"; αrng = [0.1]; num_experiments = 5
 for subdirname in subdirnames
     @show subdirname
 itp_time_resol=10000 # if the time resolution is too sparse, increase this.
 for α in αrng
-    for (prefix, initmethods, tailstrs) in [("pcb", ["DICT"], ["_sp"])]
-        rt2_min = Inf; rt2sdict = []; rt2sisvd = []; rt2ssbc = []
+    for (prefix, initmethods, tailstrs) in [("pcb", ["BPDN","DICT","isvd","sbc","sbc_p2","nndsvd"],
+                                                    ["_sp","_sp","_sp","_sp","_sp","_sp"])]
+        rt2_min = Inf; rt2sbpdn = []; rt2sdict = []; rt2sisvd = []; rt2ssbc = []; rt2ssbc_p2 = []; rt2snndsvd = []
         for (initmethod,tailstr) in zip(initmethods,tailstrs)
             fprex = "$(prefix)_$(dataset)_$(initmethod)"
             for iter in 1:num_experiments
-                fn = joinpath(subworkpath,subdirname,"data","$(fprex)$(tailstr)_a$(α)_results$(iter).jld2")
-                dd = load(fn,"data")
+                fname = joinpath(subworkpath,subdirname,"data","$(fprex)$(tailstr)_a$(α)_results$(iter).jld2")
+                isfile(fname) || break
+                dd = load(fname,"data")
                 rt2s = dd["rt2s"]; #@show initmethod, rt2s[end]
                 rt2_min = min(rt2_min,rt2s[end])
-                initmethod == "DICT" ? push!(rt2sdict,rt2s[end]) :
-                              "isvd" ? push!(rt2sisvd,rt2s[end]) :
-                                       push!(rt2ssbc,rt2s[end])
+                initmethod == "BPDN"   ? push!(rt2sbpdn,rt2s[end]) :
+                initmethod == "DICT"   ? push!(rt2sdict,rt2s[end]) :
+                initmethod == "isvd"   ? push!(rt2sisvd,rt2s[end]) :
+                initmethod == "sbc"    ? push!(rt2ssbc,rt2s[end]) :
+                initmethod == "sbc_p2" ? push!(rt2ssbc_p2,rt2s[end]) :
+                                         push!(rt2snndsvd,rt2s[end])
             end
         end
+        rt2sbpdn_mean = isempty(rt2sbpdn) ? NaN : mean(rt2sbpdn)
         rt2sdict_mean = isempty(rt2sdict) ? NaN : mean(rt2sdict)
         rt2sisvd_mean = isempty(rt2sisvd) ? NaN : mean(rt2sisvd)
         rt2ssbc_mean  = isempty(rt2ssbc) ?  NaN : mean(rt2ssbc)
-        @show α, rt2sdict_mean, rt2sisvd_mean, rt2ssbc_mean
+        rt2ssbc_p2_mean  = isempty(rt2ssbc_p2) ?  NaN : mean(rt2ssbc_p2)
+        rt2snndsvd_mean  = isempty(rt2snndsvd) ?  NaN : mean(rt2snndsvd)
+        @show α, rt2sbpdn_mean, rt2sdict_mean, rt2sisvd_mean, rt2ssbc_mean, rt2ssbc_p2_mean, rt2snndsvd_mean
         rt2_min = floor(rt2_min, digits=4)
         rng = range(0,stop=rt2_min,length=itp_time_resol)
         
-        stat_af_dict=[]; stat_af_sbc=[]; stat_af_sbc_p2=[]; stat_af_isvd=[]; stat_af_nndsvd=[]
-        stat_fx_dict=[]; stat_fx_sbc=[]; stat_fx_sbc_p2=[]; stat_fx_isvd=[]; stat_fx_nndsvd=[]
+        stat_af_bpdn=[]; stat_af_dict=[]; stat_af_sbc=[]; stat_af_sbc_p2=[]; stat_af_isvd=[]; stat_af_nndsvd=[]
+        stat_fx_bpdn=[]; stat_fx_dict=[]; stat_fx_sbc=[]; stat_fx_sbc_p2=[]; stat_fx_isvd=[]; stat_fx_nndsvd=[]
         for (initmethod,tailstr) in zip(initmethods,tailstrs)
             afs=[]; fxs=[]
             fprex = "$(prefix)_$(dataset)_$(initmethod)"
             for iter in 1:num_experiments
                 @show tailstr, iter
-                dd = load(joinpath(subworkpath,subdirname,"data","$(fprex)$(tailstr)_a$(α)_results$(iter).jld2"))
+                fname = joinpath(subworkpath,subdirname,"data","$(fprex)$(tailstr)_a$(α)_results$(iter).jld2")
+                isfile(fname) || break
+                dd = load(fname)
                 rt2s = dd["data"]["rt2s"]
                 # avgfits
                 avgfits = dd["data"]["avgfits"]
@@ -151,8 +181,9 @@ for α in αrng
             end
             # avgfits
             avgfits = hcat(afs...)
-            means = dropdims(mean(avgfits,dims=2),dims=2)
-            stds = dropdims(std(avgfits,dims=2),dims=2)
+            means = isempty(avgfits) ? NaN : dropdims(mean(avgfits,dims=2),dims=2)
+            stds = isempty(avgfits) ? NaN : dropdims(std(avgfits,dims=2),dims=2)
+            initmethod == "BPDN" && (push!(stat_af_bpdn,means); push!(stat_af_bpdn,stds))
             initmethod == "DICT" && (push!(stat_af_dict,means); push!(stat_af_dict,stds))
             initmethod == "sbc" && (push!(stat_af_sbc,means); push!(stat_af_sbc,stds))
             initmethod == "sbc_p2" && (push!(stat_af_sbc_p2,means); push!(stat_af_sbc_p2,stds))
@@ -160,8 +191,9 @@ for α in αrng
             initmethod == "nndsvd" && (push!(stat_af_nndsvd,means); push!(stat_af_nndsvd,stds))
             # fxs
             fxs = hcat(fxs...)
-            means = dropdims(mean(fxs,dims=2),dims=2)
-            stds = dropdims(std(fxs,dims=2),dims=2)
+            means = isempty(fxs) ? NaN : dropdims(mean(fxs,dims=2),dims=2)
+            stds = isempty(fxs) ? NaN : dropdims(std(fxs,dims=2),dims=2)
+            initmethod == "BPDN" && (push!(stat_fx_bpdn,means); push!(stat_fx_bpdn,stds))
             initmethod == "DICT" && (push!(stat_fx_dict,means); push!(stat_fx_dict,stds))
             initmethod == "sbc" && (push!(stat_fx_sbc,means); push!(stat_fx_sbc,stds))
             initmethod == "sbc_p2" && (push!(stat_fx_sbc_p2,means); push!(stat_fx_sbc_p2,stds))
@@ -170,22 +202,22 @@ for α in αrng
         end
         fprex="$(prefix)"
         save(joinpath(subworkpath,subdirname,"$(fprex)_a$(α)_runtime_vs_avgfits.jld2"),"rng",rng,
-            "stat_af_dict", stat_af_dict, "stat_af_sbc", stat_af_sbc, "stat_af_sbc_p2", stat_af_sbc_p2,
-            "stat_af_isvd", stat_af_isvd, "stat_af_nndsvd", stat_af_nndsvd, "stat_fx_dict", stat_fx_dict,
-            "stat_fx_sbc", stat_fx_sbc, "stat_fx_sbc_p2", stat_fx_sbc_p2, "stat_fx_isvd", stat_fx_isvd,
-            "stat_fx_nndsvd", stat_fx_nndsvd)
+            "stat_af_bpdn", stat_af_bpdn, "stat_af_dict", stat_af_dict, "stat_af_sbc", stat_af_sbc,
+            "stat_af_sbc_p2", stat_af_sbc_p2, "stat_af_isvd", stat_af_isvd, "stat_af_nndsvd", stat_af_nndsvd,
+            "stat_fx_bpdn", stat_fx_bpdn, "stat_fx_dict", stat_fx_dict, "stat_fx_sbc", stat_fx_sbc,
+            "stat_fx_sbc_p2", stat_fx_sbc_p2, "stat_fx_isvd", stat_fx_isvd, "stat_fx_nndsvd", stat_fx_nndsvd)
     end # for (prefix, initmethods, tailstrs)
 end # for α
 end # for subdirname
 
-tmppath = "delme"
+tmppath = ""
 for subdirname in subdirnames
     @show subdirname
 z = 0.5;
-for (α, maxplottime, ybtm) in [(0.0001,10.0,0.0)]
+for (α, maxplottime, ybtm) in [(0.1,40.0,0.0)]
     ylimits=(ybtm,1.1)
     plottime = Inf
-    for (mtdstr, submtdstrs) in [("$(prefix)",["_dict"])]
+    for (mtdstr, submtdstrs) in [("$(prefix)",["_bpdn","_dict","_isvd","_sbc"])]
         @show mtdstr
         ddstr = "dd$(mtdstr)"; ddsym = Symbol(ddstr)
     #    @eval (($ddsym)=(load("$(mtdstr)_runtime_vs_avgfits.jld2"))) # this doens't work 'mtdstr' refer global variable
@@ -220,19 +252,19 @@ for (α, maxplottime, ybtm) in [(0.0001,10.0,0.0)]
                     xlabel = "time(sec)", ylabel = "fit", xlabelsize=20, ylabelsize=20,
                     xticklabelsize=20, yticklabelsize=20)#, title = "Average Fit Value vs. Running Time")
     lns = Dict(); bnds=Dict()
-    for (i,(mtdstr, submtdstr, lbl, clridx, linestyle)) in enumerate([#("pcb","_sbc","SBC",2,nothing),
-                                                                    # ("pcb","_sbc_p2","SBC P2",6,nothing),
-                                                                    # ("pcb","_nndsvd","NNDSVD",5,nothing),
-                                                                    #("pcb","_isvd","ISVD",3,nothing),
-                                                                    ("pcb","_dict","DICT",2,nothing)]) # all
+    for (i,(mtdstr, submtdstr, lbl, clridx, linestyle)) in enumerate([("pcb","_bpdn","BPDN",2,nothing),
+                                                                     ("pcb","_dict","DICT",6,nothing),
+                                                                     ("pcb","_isvd","ISVD",5,nothing),
+                                                                    #("pcb","_isvd","ISVD",2,nothing),
+                                                                    ("pcb","_sbc","SBC",3,nothing)]) # all
         frpx = "$(mtdstr)_af$(submtdstr)"
         ln = lines!(ax, eval(Symbol("$(mtdstr)rng"))[plotrng], eval(Symbol("$(frpx)_means"))[plotrng], color=mtdcolors[clridx], label=lbl, linestyle=linestyle)
         bnd = band!(ax, eval(Symbol("$(mtdstr)rng"))[plotrng], eval(Symbol("$(frpx)_lower"))[plotrng], eval(Symbol("$(frpx)_upper"))[plotrng], color=mtdcoloras[clridx])
         lns["$(frpx)_line"] = ln; bnds["$(frpx)_band"] = bnd;
     end
 
-    #axislegend(ax, labelsize=20, position = :rb) # halign = :left, valign = :top
-    save(joinpath(subworkpath,tmppath,subdirname,"fits_a$(α)_all.png"),fig,px_per_unit=2)
+    axislegend(ax, labelsize=20, position = :rb) # halign = :left, valign = :top
+    save(joinpath(subworkpath,tmppath,subdirname,"fits_a$(α)_all$(maxplottime).png"),fig,px_per_unit=2)
 
     # fxs
     fig = Figure(size=(600,450))
@@ -240,19 +272,19 @@ for (α, maxplottime, ybtm) in [(0.0001,10.0,0.0)]
                     yscale=log10,xlabel = "time(sec)", ylabel = "penalty", xlabelsize=20, ylabelsize=20,
                     xticklabelsize=20, yticklabelsize=20)#, title = "Average Fit Value vs. Running Time")
     lns = Dict(); bnds=Dict()
-    for (i,(mtdstr, submtdstr, lbl, clridx, linestyle)) in enumerate([#("pcb","_sbc","SBC",2,nothing),
-                                                                    # ("pcb","_sbc_p2","SBC P2",6,nothing),
-                                                                    # ("pcb","_nndsvd","NNDSVD",5,nothing),
-                                                                    #("pcb","_isvd","ISVD",3,nothing),
-                                                                    ("pcb","_dict","DICT",2,nothing)]) # all
+    for (i,(mtdstr, submtdstr, lbl, clridx, linestyle)) in enumerate([("pcb","_bpdn","BPDN",2,nothing),
+                                                                     ("pcb","_dict","DICT",6,nothing),
+                                                                     ("pcb","_isvd","ISVD",5,nothing),
+                                                                    #("pcb","_isvd","ISVD",2,nothing),
+                                                                    ("pcb","_sbc","SBC",3,nothing)]) # all
         frpx = "$(mtdstr)_fx$(submtdstr)"
         ln = lines!(ax, eval(Symbol("$(mtdstr)rng"))[plotrng], eval(Symbol("$(frpx)_means"))[plotrng], color=mtdcolors[clridx], label=lbl, linestyle=linestyle)
         bnd = band!(ax, eval(Symbol("$(mtdstr)rng"))[plotrng], eval(Symbol("$(frpx)_lower"))[plotrng], eval(Symbol("$(frpx)_upper"))[plotrng], color=mtdcoloras[clridx])
         lns["$(frpx)_line"] = ln; bnds["$(frpx)_band"] = bnd;
     end
 
-    #axislegend(ax, labelsize=20, position = :rt) # halign = :left, valign = :top
-    save(joinpath(subworkpath,tmppath,subdirname,"penalty_a$(α)_all.png"),fig,px_per_unit=2)
+    axislegend(ax, labelsize=20, position = :rt) # halign = :left, valign = :top
+    save(joinpath(subworkpath,tmppath,subdirname,"penalty_a$(α)_all$(maxplottime).png"),fig,px_per_unit=2)
 
 end # for α
 

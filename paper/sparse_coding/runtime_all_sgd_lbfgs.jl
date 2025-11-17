@@ -20,32 +20,43 @@ nr = eval(Meta.parse(ARGS[3]))
 inner_tol = eval(Meta.parse(ARGS[4]))
 smaxiter = eval(Meta.parse(ARGS[5]))
 maxiter = eval(Meta.parse(ARGS[6]))
+inner_maxiter = 1000
 
-subdirname = "r$(r)_ur$(ur)_nr$(nr)_itol$(inner_tol)_sit$(smaxiter)_it$(maxiter)"
+subdirname = "sa10_store_r$(r)_ur$(ur)_nr$(nr)_itol$(inner_tol)_iit$(inner_maxiter)_sit$(smaxiter)_it$(maxiter)"
 @show subdirname
+dataset = :fakecells; SNR=0; inhibitindices=[]; bias=0.1
+filter = dataset ∈ [] ? :meanT : :none; filterstr = "_$(filter)"
+datastr = dataset == :fakecells ? "_fc$(inhibitindices)_$(SNR)dB" : "_$(dataset)"
 
-function init_dictionary(X, K)
-    D = X[:, rand(1:end, K)]
-    D ./= sqrt.(sum(D .^ 2, dims=1))  # Normalize columns
-    return D
+imgsz0 = (40,20); factor = 1
+sqfactor = Int(floor(sqrt(factor)))
+bias = 0.1
+
+@show bias; flush(stdout)
+imgsz = (sqfactor*imgsz0[1],sqfactor*imgsz0[2]); lengthT = factor*1000; sigma = sqfactor*5.0
+X, imgsz, lengthT, ncs, gtncs, datadic = load_data(dataset; dpath=subworkpath, sigma=sigma, imgsz=imgsz,
+        lengthT=lengthT, SNR=SNR, bias=bias, useCalciumT=true, inhibitindices=inhibitindices, issave=true,
+        isload=true, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
+(m,n,p) = (size(X)...,ncs)
+gtW, gtH = dataset == :fakecells ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
+
+subtract_bg = false
+sbgstr = subtract_bg ? "sbg" : "nosbg"
+if subtract_bg
+    rt1cd = @elapsed W, H = NMF.nndsvd(X, 1, variant=:ar) # rank 1 NMF
+    NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=60, α=0), X, W, H)
+    bg = W*fill(mean(H),1,n)
+    X .-= bg
 end
-
-dataset = :natural
-ddinit = load(joinpath(subworkpath,"allinit.jld2"))
-X_whitened = ddinit["X_whitened"][1]
-U, Vt, D = ddinit["SVD"]; V = Vt'; ncs = size(U,2)
-(m,n,p) = (size(X_whitened)...,ncs)
-gtW, gtH = (Matrix{eltype(X_whitened)}(undef,0,0),Matrix{eltype(X_whitened)}(undef,0,0))
-imgsz=(12,12); lengthT=size(Vt,2)
 
 prefix = "pcb"
 noc = ncs; nac = 0
 
-num_experiments=5
+num_experiments=30
 rt1s = 0; nsuccess = 0
 maskth=0.25; maskW=rand(imgsz...).<maskth; maskW = vec(maskW); maskH=rand(lengthT).<maskth;
-tol=-1; maxiter = maxiter # Int(ceil(log(eps(eltype(X_whitened)))/log(r)))
-αrng = [0.1]
+tol=-1; maxiter = maxiter # Int(ceil(log(eps(eltype(X)))/log(r)))
+αrng = [0.005]
 
 # for (inner_maxiter, r) in [(10,0.3),(10,0.5),(10,0.99),
 #                            (100,0.3),(100,0.5),(100,0.99),
@@ -54,50 +65,47 @@ tol=-1; maxiter = maxiter # Int(ceil(log(eps(eltype(X_whitened)))/log(r)))
 for α in αrng
     @show α; flush(stdout)
     (tailstr,β) = ("_sp",0.)
-    α1=0; α2=α; β1=β2=0
+    α1=α2=α; β1=β2=0
 for iter in 1:num_experiments
     @show iter; flush(stdout)
     useprecond = false; usedenoiseUVt = false; uselv = false
-    for initmethod in [:DICT,:isvd,:sbc,:BPDN]
-        @show initmethod
-        fprex = "$(prefix)_$(dataset)_$(initmethod)"
-        if initmethod == :DICT
-            Winit = init_dictionary(X_whitened, noc)
-            M0 = U'Winit; N0t = rand(noc,noc)
-            Hinit = N0t'*Vt
-        else
-            Winit, Hinit, M0, N0t, _ = ddinit[String(initmethod)]
-        end
-        fv = LCSVD.fitd(X_whitened,Winit*Hinit)
-        LCSVD.normalizeW!(Winit,Hinit)
-        Sw = norm(Winit,1); Sh = norm(Hinit,1) # Sh includes whole power
-        #imsave_data(dataset,joinpath(subworkpath,"$(fprex)_f$(fv)_Sw$(Sw)_expr$(iter).png"),Winit,Hinit,imgsz,lengthT; saveH=false)
+    for optim_method in [:lbfgs, :sgd_injectnoise]
+        @show optim_method
+        initmethod = :isvd
+        fprex = "$(prefix)_sa1_$(dataset)_$(initmethod)"
+        rt1 = @elapsed U, Vt, M0, N0, Wp, Hp, D = LCSVD.initpcb(X, noc, nac; initmethod=initmethod, svdmethod=:isvd)
+        V = copy(Vt'); N0t = copy(N0')
 
         dd = Dict()
         alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2,
             #α1vec=α1vec, α2vec=α2vec, β1vec=β1vec, β2vec=β2vec,
-            r=r, useprecond=useprecond, usedenoiseUVt=usedenoiseUVt, maskW=maskW, maskH = maskH, optim_method = :sgd_injectnoise,
-            denoisefilter=:avg, uselv=uselv, imgsz=imgsz, maxiter = maxiter, smaxiter = smaxiter, store_trace = true,
-            store_inner_trace = true, show_trace = true, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
-            f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0, ur=ur, nr=nr);
+            r=r, useprecond=useprecond, usedenoiseUVt=usedenoiseUVt, maskW=maskW, maskH = maskH, optim_method = optim_method,
+            denoisefilter=:avg, uselv=uselv, imgsz=imgsz, maxiter = maxiter, smaxiter = smaxiter, inner_maxiter=inner_maxiter,
+            store_trace = true, store_inner_trace = true, show_trace = true, store_sparsity_nneg = true, allow_f_increases = true,
+            f_abstol=tol, f_reltol=tol, f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0,
+            ur=ur, nr=nr);
         M1, N1t = copy(M0), copy(N0t)
-        rst = LCSVD.solve!(alg, X_whitened, U, V, D, M1, N1t; gtW=gtW, gtH=gtH);
+        rst = LCSVD.solve!(alg, X, U, V, D, M1, N1t; gtW=gtW, gtH=gtH);
         alg.show_trace = false; alg.store_trace = false; alg.store_inner_trace = false; alg.maskW = alg.maskH = Colon()
+        store_sparsity_nneg = false
         M1, N1t = copy(M0), copy(N0t)
-        rt2 = @elapsed rst0 = LCSVD.solve!(alg, X_whitened, U, V, D, M1, N1t);
+        rt2 = @elapsed rst0 = LCSVD.solve!(alg, X, U, V, D, M1, N1t);
 
         W1, H1 = rst0.W, rst0.Ht'
-        LCSVD.normalizeW!(W1,H1);
-        fit = LCSVD.fitd(X_whitened,W1*H1); @show fit; flush(stdout)
-        fname = joinpath(subworkpath,subdirname,"$(fprex)_$(alg.optim_method)_a$(α)_b$(β)_f$(fit)_it$(rst0.niters)_rt$(rt2)")
+        LCSVD.normalizeW!(W1,H1)
+        fv, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W1, H1; clamp=false)
+        nodr = LCSVD.matchedorder(ml,noc)
+        W1, H1 = W1[:,nodr], H1[nodr,:]
+        fname = joinpath(subworkpath,subdirname,"$(fprex)_$(alg.optim_method)_a$(α)_b$(β)_af$(fv)_it$(rst0.niters)_rt$(rt2)")
         imsave_data(dataset,fname,W1,H1,imgsz,100; saveH=false, verbose=false)
 
         f_xs = LCSVD.getdata(rst.traces,:f_x); niters = LCSVD.getdata(rst.traces,:niters); totalniters = sum(niters)
         avgfitss = LCSVD.getdata(rst.traces,:avgfits); fxss = LCSVD.getdata(rst.traces,:fxs)
-        avgfits = Float64[]; inner_fxs = Float64[]; rt2s = Float64[]
-        for (iter,(afs,fxs)) in enumerate(zip(avgfitss, fxss))
+        symss = LCSVD.getdata(rst.traces,:invs); sparWss = LCSVD.getdata(rst.traces,:sparseWs); sparHss = LCSVD.getdata(rst.traces,:sparseHs)
+        avgfits = Float64[]; inner_fxs = Float64[]; sympens = Float64[]; sparWpens = Float64[]; sparHpens = Float64[]; rt2s = Float64[]
+        for (iter,(afs,fxs,syms,sparWs,sparHs)) in enumerate(zip(avgfitss, fxss, symss, sparWss, sparHss))
             isempty(afs) && continue
-            append!(avgfits,afs); append!(inner_fxs,fxs)
+            append!(avgfits,afs); append!(inner_fxs,fxs); append!(sympens,syms); append!(sparWpens,sparWs); append!(sparHpens,sparHs)
             if iter == 1
                 rt2i = 0.
             else
@@ -106,15 +114,17 @@ for iter in 1:num_experiments
             append!(rt2s,rt2i)
         end
         dd["niters"] = niters; dd["totalniters"] = totalniters; dd["rt1"] = 0; dd["rt2s"] = rt2s
-        dd["avgfits"] = avgfits; dd["f_xs"] = f_xs; dd["inner_fxs"] = inner_fxs; dd["laps"] = rst0.laps[2:end]-rst0.laps[1:end-1]
+        dd["avgfits"] = avgfits; dd["f_xs"] = f_xs; dd["inner_fxs"] = inner_fxs
+        dd["sympens"] = sympens; dd["sparWpens"] = sparWpens; dd["sparHpens"] = sparHpens
+        dd["laps"] = rst0.laps[2:end]-rst0.laps[1:end-1]
         if true#iter == num_experiments
             metadata = Dict()
             metadata["r"] = r; metadata["ur"] = ur; metadata["nr"] = nr; metadata["initmethod"] = initmethod
-            metadata["inner_tol"] = inner_tol; metadata["smaxiter"] = smaxiter; metadata["maxiter"] = maxiter
-            metadata["useprecond"] = useprecond; metadata["usedenoiseUVt"] = usedenoiseUVt
+            metadata["inner_tol"] = inner_tol; metadata["inner_maxiter"] = inner_maxiter; metadata["smaxiter"] = smaxiter
+            metadata["maxiter"] = maxiter; metadata["useprecond"] = useprecond; metadata["usedenoiseUVt"] = usedenoiseUVt
             metadata["denoisefilter"] = alg.denoisefilter; metadata["alpha"] = α; metadata["beta"] = β
         end
-        save(joinpath(subworkpath,subdirname,"data","$(fprex)$(tailstr)_a$(α)_results$(iter).jld2"),"metadata",metadata,"data",dd)
+        save(joinpath(subworkpath,subdirname,"data","$(fprex)$(tailstr)_$(alg.optim_method)_a$(α)_results$(iter).jld2"),"metadata",metadata,"data",dd)
     end
 end # for iter
 rt1avg = rt1s/nsuccess

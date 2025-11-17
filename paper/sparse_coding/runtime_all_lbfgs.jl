@@ -12,17 +12,11 @@ cd(workpath); Pkg.activate(".")
 include(joinpath(workpath,"setup_light.jl"))
 subworkpath = joinpath(workpath,"paper","sparse_coding")
 
-# in julia REPL> ARGS = ["\"tsvd_test\"","[\"pcb_tsvd\"]", "1", "2","0","1","15","150","120","0.1","800"]
-# ARGS = ["0.3", "1e-3","1e-2","1e-6","100","100"]
-r = eval(Meta.parse(ARGS[1]))
-ur = eval(Meta.parse(ARGS[2]))
-nr = eval(Meta.parse(ARGS[3]))
-inner_tol = eval(Meta.parse(ARGS[4]))
-smaxiter = eval(Meta.parse(ARGS[5]))
-maxiter = eval(Meta.parse(ARGS[6]))
-
-subdirname = "r$(r)_ur$(ur)_nr$(nr)_itol$(inner_tol)_sit$(smaxiter)_it$(maxiter)"
-@show subdirname
+inner_tol = eval(Meta.parse(ARGS[1]))
+inner_maxiter = eval(Meta.parse(ARGS[2]))
+maxiter = eval(Meta.parse(ARGS[3]))
+r = eval(Meta.parse(ARGS[4]))
+@show  inner_tol, inner_maxiter, maxiter, r; flush(stdout)
 
 function init_dictionary(X, K)
     D = X[:, rand(1:end, K)]
@@ -41,16 +35,18 @@ imgsz=(12,12); lengthT=size(Vt,2)
 prefix = "pcb"
 noc = ncs; nac = 0
 
-num_experiments=5
+num_experiments=2
 rt1s = 0; nsuccess = 0
 maskth=0.25; maskW=rand(imgsz...).<maskth; maskW = vec(maskW); maskH=rand(lengthT).<maskth;
 tol=-1; maxiter = maxiter # Int(ceil(log(eps(eltype(X_whitened)))/log(r)))
-αrng = [0.1]
+αrng = [1e-4]
 
 # for (inner_maxiter, r) in [(10,0.3),(10,0.5),(10,0.99),
 #                            (100,0.3),(100,0.5),(100,0.99),
 #                            (1000,0.3),(1000,0.5),(1000,0.99), ]
 # for maxiter in [1,2,3,5,10]
+subdirname = "innertol$(inner_tol)_inneriter$(inner_maxiter)_iter$(maxiter)_r$(r)"
+@show subdirname
 for α in αrng
     @show α; flush(stdout)
     (tailstr,β) = ("_sp",0.)
@@ -58,7 +54,7 @@ for α in αrng
 for iter in 1:num_experiments
     @show iter; flush(stdout)
     useprecond = false; usedenoiseUVt = false; uselv = false
-    for initmethod in [:DICT,:isvd,:sbc,:BPDN]
+    for initmethod in [:DICT]#,:sbc_p2,:nndsvd
         @show initmethod
         fprex = "$(prefix)_$(dataset)_$(initmethod)"
         if initmethod == :DICT
@@ -67,6 +63,7 @@ for iter in 1:num_experiments
             Hinit = N0t'*Vt
         else
             Winit, Hinit, M0, N0t, _ = ddinit[String(initmethod)]
+            LCSVD.normalizeW!(Wp,Hp);
         end
         fv = LCSVD.fitd(X_whitened,Winit*Hinit)
         LCSVD.normalizeW!(Winit,Hinit)
@@ -76,10 +73,10 @@ for iter in 1:num_experiments
         dd = Dict()
         alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2,
             #α1vec=α1vec, α2vec=α2vec, β1vec=β1vec, β2vec=β2vec,
-            r=r, useprecond=useprecond, usedenoiseUVt=usedenoiseUVt, maskW=maskW, maskH = maskH, optim_method = :sgd_injectnoise,
-            denoisefilter=:avg, uselv=uselv, imgsz=imgsz, maxiter = maxiter, smaxiter = smaxiter, store_trace = true,
-            store_inner_trace = true, show_trace = true, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
-            f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0, ur=ur, nr=nr);
+            r=r, useprecond=useprecond, usedenoiseUVt=usedenoiseUVt, maskW=maskW, maskH = maskH,
+            denoisefilter=:avg, uselv=uselv, imgsz=imgsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
+            store_inner_trace = true, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
+            f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0);
         M1, N1t = copy(M0), copy(N0t)
         rst = LCSVD.solve!(alg, X_whitened, U, V, D, M1, N1t; gtW=gtW, gtH=gtH);
         alg.show_trace = false; alg.store_trace = false; alg.store_inner_trace = false; alg.maskW = alg.maskH = Colon()
@@ -89,7 +86,7 @@ for iter in 1:num_experiments
         W1, H1 = rst0.W, rst0.Ht'
         LCSVD.normalizeW!(W1,H1);
         fit = LCSVD.fitd(X_whitened,W1*H1); @show fit; flush(stdout)
-        fname = joinpath(subworkpath,subdirname,"$(fprex)_$(alg.optim_method)_a$(α)_b$(β)_f$(fit)_it$(rst0.niters)_rt$(rt2)")
+        fname = joinpath(subworkpath,subdirname,"$(fprex)_a$(α)_b$(β)_f$(fit)_it$(rst0.niters)_rt$(rt2)")
         imsave_data(dataset,fname,W1,H1,imgsz,100; saveH=false, verbose=false)
 
         f_xs = LCSVD.getdata(rst.traces,:f_x); niters = LCSVD.getdata(rst.traces,:niters); totalniters = sum(niters)
@@ -109,10 +106,10 @@ for iter in 1:num_experiments
         dd["avgfits"] = avgfits; dd["f_xs"] = f_xs; dd["inner_fxs"] = inner_fxs; dd["laps"] = rst0.laps[2:end]-rst0.laps[1:end-1]
         if true#iter == num_experiments
             metadata = Dict()
-            metadata["r"] = r; metadata["ur"] = ur; metadata["nr"] = nr; metadata["initmethod"] = initmethod
-            metadata["inner_tol"] = inner_tol; metadata["smaxiter"] = smaxiter; metadata["maxiter"] = maxiter
-            metadata["useprecond"] = useprecond; metadata["usedenoiseUVt"] = usedenoiseUVt
-            metadata["denoisefilter"] = alg.denoisefilter; metadata["alpha"] = α; metadata["beta"] = β
+            metadata["r"] = r; metadata["initmethod"] = initmethod
+            metadata["maxiter"] = maxiter; metadata["useprecond"] = useprecond
+            metadata["usedenoiseUVt"] = usedenoiseUVt; metadata["denoisefilter"] = alg.denoisefilter
+            metadata["alpha"] = α; metadata["beta"] = β
         end
         save(joinpath(subworkpath,subdirname,"data","$(fprex)$(tailstr)_a$(α)_results$(iter).jld2"),"metadata",metadata,"data",dd)
     end
@@ -137,7 +134,7 @@ for subdirname in subdirnames
     @show subdirname
 itp_time_resol=10000 # if the time resolution is too sparse, increase this.
 for α in αrng
-    for (prefix, initmethods, tailstrs) in [("pcb", ["DICT","isvd","sbc","BPDN"], ["_sp","_sp","_sp","_sp"])]
+    for (prefix, initmethods, tailstrs) in [("pcb", ["DICT"], ["_sp"])]
         rt2_min = Inf; rt2sdict = []; rt2sisvd = []; rt2ssbc = []
         for (initmethod,tailstr) in zip(initmethods,tailstrs)
             fprex = "$(prefix)_$(dataset)_$(initmethod)"
