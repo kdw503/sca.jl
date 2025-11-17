@@ -55,9 +55,9 @@ y = a .* exp.(-t ./ τ)         # dependent values (we try to predict these)
 
 # Initialize the cache for intermediate values. `RJCache` is the default type, and it stores
 # the residuals and Jacobian.
-r = zeros(length(y))     # allocate space to store the residuals
-J = zeros(length(y), 2)  # allocate space to store the Jacobian
-rj = RJCache(r, J)
+rw = zeros(nc^2+m*noc)     # allocate space to store the residuals for W components
+Jw = zeros(nc^2+m*noc, nc*noc)  # allocate space to store the Jacobian for W components
+rjw = RJCache(rw, Jw)
 
 # Create the function `f!` that we'll use in optimization.
 # `f!` should take three arguments, `f!(rj, x, idx)`, where
@@ -76,17 +76,20 @@ rj = RJCache(r, J)
 # For performance reasons, enclose any global variables (here, `t` and `y`) by passing them as
 # arguments to a function that creates `f!`.
 # Here we write out the Jacobian by hand; below, we'll see how you can use Automatic Differentiation for these computations.
-function create_f!(t, y)
+
+for i = 1:nc
+
+
+function create_f!(U,N,D)
     return function(rj, x, idx)        # this is `f!`
-        tidx, yidx = t[idx], y[idx]    # we only need to compute residual and Jacobian for the ones in `idx`
-        a′, τ′ = x
-        expvals = exp.(-tidx ./ τ′)
-        ypred = a′ * expvals
-        r = ypred - yidx
+        M = reshape(x,nc,noc)
+        Rs = M*N-D
+        Um = U[idx,:]; Wm = Um*M; Rmn = min.(Wm,0)
         if rj !== nothing              # Important! The `rj` input might be `nothing` (if the cache
-            rj.r[idx] .= r             #  does not yet need updating)
-            rj.J[idx,1] .= expvals
-            rj.J[idx,2] .= tidx ./ τ′^2 .* ypred
+            rj.r[1:nc^2] .= vec(Rs)             #  does not yet need updating)
+            rj.r[1:nc^2] .= vec(Rs)
+            rj.J[i:nc:end,i:nc:end] .= N'
+            rj.J[idx,2] .= 
         end
         return dot(r, r) / 2
     end
