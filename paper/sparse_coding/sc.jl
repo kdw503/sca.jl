@@ -41,11 +41,12 @@ if subtract_bg
     X .-= bg
 end
 
+prefix = "PCB"
 noc = ncs; nac = 0; initmethod = :isvd
 rt1 = @elapsed U, Vt, M0, N0, Wp, Hp, D = LCSVD.initpcb(X, noc, nac; initmethod=initmethod, svdmethod=:isvd)
 V = copy(Vt'); N0t = copy(N0')
 
-ur = 1e-3; nr = 0.01
+ur = 3e-3; nr = 1e-2
 for (ur,nr) in [(1e-3,1e-3),(1e-3,5e-3),(1e-3,1e-2),(2e-3,1e-3),(2e-3,5e-3),(2e-3,1e-2),(3e-3,1e-3),(3e-3,5e-3),(3e-3,1e-2),(1e-3,0.0001)]
 β1 = β2 = β = 0; α1 = α2 = 0.005
 r=0.3; useprecond=false; uselv=false
@@ -95,7 +96,7 @@ sD = dd["D"]; αs = dd["αs"]; X_whitened = dd["X_whitened"]
 # sD = dd["D"]; αs = dd["αs"]; X_whitened = dd["X_whitened"]
 
 dallinit = Dict{String,Tuple}()
-for initmethod in [:isvd, :BPDN, :sbc]
+for initmethod in [:randcolX, :randH, :isvd, :BPDN]
     @show initmethod
     initmtd = initmethod == :nndsvd ? initmethod : :isvd
     rt1 = @elapsed U, Vt, M0, N0, Wp, Hp, D = LCSVD.initpcb(X_whitened, noc, nac; initmethod=initmtd, svdmethod=:isvd)
@@ -103,6 +104,11 @@ for initmethod in [:isvd, :BPDN, :sbc]
     if initmethod == :BPDN
         LCSVD.balanceWH!(sD,αs)
         M0, N0 = (U'sD, αs*Vt')
+    elseif initmethod == :randcolX
+        Winit = LCSVD.init_dictionary(X_whitened,noc+nac)
+        Hinit = Winit\X_whitened
+        M0 = U\Winit; N0 = Hinit/Vt
+        LCSVD.balanceWH!(M0, N0)
     elseif initmethod == :sbc
         try
             rt11 = @elapsed N0t = sbc(V)
@@ -149,7 +155,7 @@ for initmethod in [:BPDN, :isvd, :sbc]
 end
 
 
-# PCB
+#============== PCB ==============================#
 prefix = "pcb"
 dataset = :natural; noc = 72; nac = 0; imgsz=(12,12); lengthT = 100000
 
@@ -159,21 +165,21 @@ U, Vt, D = dd["SVD"]; V = Vt'
 (m,n,p) = (size(X_whitened)...,ncs); imgsz = (12,12)
 gtW, gtH = (Matrix{eltype(X_whitened)}(undef,0,0),Matrix{eltype(X_whitened)}(undef,0,0))
 
-for initmethod in [:BPDN,:isvd,:sbc]
+for initmethod in [:randcolX, :randH, :BPDN, :isvd]
     @show initmethod
     Winit, Hinit, M0, N0t, _ = dd[String(initmethod)]
     Es = []; Esyms = []; L1hs = []; Eshs = []
-    for (α, ur, nr, optim_method) in [(0.1, 5e-3, 0.3, :sgd), (0.1, 1e-2, 0.3, :sgd), (0.1, 5e-2, 0.3, :sgd), (0.1, 1e-1, 0.3, :sgd),
-                                    (0.1, 5e-3, 0.1, :sgd), (0.1, 1e-2, 0.1, :sgd), (0.1, 5e-3, 0.05, :sgd), (0.1, 1e-2, 0.05, :sgd)] # (0.01, :sgd_injectnoise), 
-        @show optim_method
+    for (maxiter, inner_maxiter) in [(30, 10), (30, 100)] # (0.01, :sgd_injectnoise),
+        (α, ur, nr, optim_method) = (0.0005, 5e-3, 0.3, :lbfgs)
+        @show maxiter, inner_maxiter
         # ur = 1e-3; nr = 1e-2 # :sgd_injectnoise
-        ur = ur; nr = nr # :sgd learning rate, batch size rate
         β1 = β2 = β = 0; α1 = 0; α2 = α# sparse coding
         β1vec = fill(β1,noc); β2vec = fill(β2,noc); β1vec[1] = 0.; β2vec[1] = 0.
         α1vec = fill(α1,noc); α2vec = fill(α2,noc); α1vec[1] = 0.; α2vec[1] = 0.
-        r=0.3; useprecond=false; uselv=false
-        maxiter = 50#Int(ceil(log(eps(eltype(X_whitened)))/log(r))) #lcsvd_maxiter # 
-        tol=1e-6; inner_tol = 1e-6; inner_maxiter = 1000#Int(ceil(2.5*ncs+350))# Int(ceil(0.75*ncs+100)) #
+        r=0.5; useprecond=false; uselv=false
+        # maxiter = 500 # 500 #Int(ceil(log(eps(eltype(X_whitened)))/log(r))) #lcsvd_maxiter #
+        tol=0; inner_tol = 1e-7
+        # inner_maxiter = 10 #Int(ceil(2.5*ncs+350))# Int(ceil(0.75*ncs+100)) #
         smaxiter = 200 # for sgd
         alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2,
             #α1vec=α1vec, α2vec=α2vec, β1vec=β1vec, β2vec=β2vec,
@@ -181,33 +187,34 @@ for initmethod in [:BPDN,:isvd,:sbc]
             denoisefilter=:avg, uselv=false, imgsz=imgsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
             store_inner_trace = false, show_trace = true, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
             f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0, ur=ur, nr=nr); # ur=0.00001, nr=0.001
+        # M1, N1t = copy(M0), copy(N0t)
+        # rst1 = LCSVD.solve!(alg, X_whitened, U, V, D, M1, N1t; gtW=gtW, gtH=gtH, use_σ2_cal_pen=false);
+        alg.show_trace = true; alg.store_trace = false; alg.store_inner_trace = false
         M1, N1t = copy(M0), copy(N0t)
-        rst1 = LCSVD.solve!(alg, X_whitened, U, V, D, M1, N1t; gtW=gtW, gtH=gtH, use_σ2_cal_pen=false);
-        alg.show_trace = false; alg.store_trace = false; alg.store_inner_trace = false
-        M1, N1t = copy(M0), copy(N0t)
-        rt2 = 0. # @elapsed LCSVD.solve!(alg, X_whitened, U, V, D, M1, N1t);
+        rt2 = @elapsed rst1 = LCSVD.solve!(alg, X_whitened, U, V, D, M1, N1t);
 
         W1, H1 = rst1.W, rst1.Ht'
-        L1h = norm(H1,1)
+        # L1h = norm(H1,1)
         fv = LCSVD.fitd(X_whitened,W1*H1)
-        Einit = rst1.traces[1].f_x; Eend = rst1.traces[end].f_x
-        Esym = rst1.traces[end].sympen
-        Esh = rst1.traces[end].sparseH
+        # Einit = rst1.traces[1].f_x; Eend = rst1.traces[end].f_x
+        # Esym = rst1.traces[end].sympen
+        # Esh = rst1.traces[end].sparseH
         LCSVD.normalizeWH!(W1,H1); norm1nH = norm(H1,1)
-        fprex = "$(prefix)_$(initmethod)_$(optim_method)_intol$(inner_tol)"
+        fprex = "$(prefix)_$(initmethod)_$(optim_method)_intol$(inner_tol)_initer$(inner_maxiter)"
         #fprex = "$(prefix)_BPDN"
         regstr = alg.usecolparams ? "_avec($(α1vec[1]),$(α1vec[2]))_bvec($(β1vec[1]),$(β1vec[2]))" :
                  optim_method == :lbfgs ? "_aw$(α1)_ah$(α2)_b$(β)" :
                  optim_method == :sgd_injectnoise ? "_aw$(α1)_ah$(α2)_b$(β)_ur$(alg.ur)_nr$(alg.nr)" : "_aw$(α1)_ah$(α2)_b$(β)_ur$(alg.nr)_ur$(alg.nr)"
-        fname = joinpath(subworkpath,"$(fprex)$(regstr)_Einit$(Einit)_Eend$(Eend)_Esy$(Esym)_Esh$(Esh)_nH$(norm1nH)_f$(fv)_it$(rst1.niters)_rt$(rt2)")
+        # fname = joinpath(subworkpath,"$(fprex)$(regstr)_Einit$(Einit)_Eend$(Eend)_Esy$(Esym)_Esh$(Esh)_nH$(norm1nH)_f$(fv)_it$(rst1.niters)_rt$(rt2)")
+        fname = joinpath(subworkpath,"$(fprex)$(regstr)_f$(fv)_it$(rst1.niters)_rt$(rt2)")
         imsave_data(dataset,fname,W1,H1,imgsz,lengthT; saveH=false)
 #        imsave_data(dataset,fname*"_c",W1,H1,imgsz,200; saveH=true, signedcolors=TestData.g1wm())
         # Xest = W1*H1; mse = norm(X_whitened[:,1:72]-Xest[:,1:72])^2/length(X_whitened[:,1:72])
         # imsave_data(dataset,joinpath(subworkpath,"$(fprex)$(regstr)_mse$(mse)_Xest1to72.png"),Xest[:,1:72],Xest[1:72,:],imgsz,lengthT; saveH=false)
-        push!(Es, Eend)
-        push!(Esyms, Esym)
-        push!(L1hs, L1h)
-        push!(Eshs, Esh)
+        # push!(Es, Eend)
+        # push!(Esyms, Esym)
+        # push!(L1hs, L1h)
+        # push!(Eshs, Esh)
     end
     # save(joinpath(subworkpath,"$(prefix)_$(initmethod)_penalties.jld2"),
     #     "Es", Es, "Esyms", Esyms, "L1hs", L1hs, "Eshs", Eshs)
@@ -290,7 +297,7 @@ for initmethod in [:DICT, :BPDN, :isvd, :nndsvd]
         @show initmethod, λ, rt
 
         W1, H1 = U*M1, N1t'*Vt
-        Esw = norm(W1,1) 
+        Esw = norm(W1,1)
         LCSVD.normalizeW!(W1,H1); Sh = norm(H1,1)
         fv = LCSVD.fitd(X_whitened,W1*H1)
         Es=norm(M1*N1t'-D)^2
@@ -331,10 +338,10 @@ for λ in [2.0], lr in [0.03], max_iter in [50, 100, 200]
     imsave_data(dataset,fname,W1,H1,imgsz,lengthT; saveH=false)
 end
 
-max_iter = 50
-for λ in [3.0,0.01,0.1,1.0,10.0], lr in [1e-1,1e-2,1e-3]
-    initmethod = :RAND
-    rt = @elapsed W1, H1 = LCSVD.sparse_coding(X_whitened, noc, λ; max_iter=max_iter, lr=lr)
+max_iter = 10
+for λ in [3.0], lr in [1e-1]
+    initmethod = :BPDN
+    rt = @elapsed W1, H1 = LCSVD.sparse_coding(X_whitened, noc, λ, dd; initmethod=initmethod, max_iter=max_iter, lr=lr)
     @show initmethod, λ, rt
 
     LCSVD.normalizeW!(W1,H1); Sh = norm(H1,1)
@@ -346,6 +353,41 @@ for λ in [3.0,0.01,0.1,1.0,10.0], lr in [1e-1,1e-2,1e-3]
     imsave_data(dataset,fname,W1,H1,imgsz,lengthT; saveH=false)
 end
 
+#================== PCB style Sparse Coding using regularization =========================#
+
+using ForwardDiff
+
+# Check the gradient gradft = 2*M'*(M*Nt'-D) of f(Nt) = norm(M*Nt'-D)^2 with ForwardDiff
+M = rand(4,4); Nt = rand(4,4); D = M*Nt'
+Nt = rand(4,4)
+f(Nt) = norm(M*Nt'-D)^2
+fgradf = ForwardDiff.gradient(f, Nt)
+gradft = 2*M'*(M*Nt'-D)
+gradf = 2*(Nt*M'-D')*M
+@show norm(fgradf-gradft')
+@show norm(fgradf-gradf)
+
+dataset = :natural
+dd = load(joinpath(subworkpath,"allinit.jld2"))
+X_whitened = dd["X_whitened"][1]; imgsz = (12,12); lengthT = size(X_whitened,2)
+noc = 72; λ=0.9; max_iter = 1000; lr=0.02; initmethod = :DICT
+for initmethod in [:randcolX#=, :BPDN, :isvd=#]
+    for max_iter in [1000, 2000#=, 50, 500=#], λ in [0.9#=, 2.0=#], lr in [0.02#=, 0.1=#], a in [0.5#=, 0.005, 0.05, 1.0=#]
+        @show initmethod, max_iter, λ, lr, a
+        # if max_iter ∈ [50]  && λ ∈ [0.9] && lr ∈ [0.02] && a ∈ [0.005]
+        #     continue
+        # end
+        rt = @elapsed W1, H1 = LCSVD.sparse_coding_reg(X_whitened, noc, λ, dd, a; initmethod=initmethod, max_iter=max_iter, lr=lr)
+        @show rt
+        Esw = norm(W1,1) 
+        LCSVD.normalizeW!(W1,H1); Sh = norm(H1,1)
+        fv = LCSVD.fitd(X_whitened,W1*H1)
+        fprex = "SC_PCB_$(initmethod)"
+        regstr = "_l$(λ)_lr$(lr)_a$(a)_it$(max_iter)"
+        fname = joinpath(subworkpath,"$(fprex)$(regstr)_f$(fv)_Sh$(Sh)_rt$(rt)")
+        imsave_data(dataset,fname,W1,H1,imgsz,lengthT; saveH=false)
+    end
+end
 
 #================== PCB using constraint instead of regularization =========================#
 # need to set α1 = α2 = 0 to nullify the regularization effect
