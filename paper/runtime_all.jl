@@ -15,31 +15,31 @@ include(joinpath(workpath,"setup_light.jl"))
 # powershell prompt> julia C:\Users\kdw76\WUSTL\Work\julia\sca\paper\runtime_all.jl '\"SNR\"' '[\"pcb_precon\",\"hals\",\"compnmf\"]'  50 -10 1 15 150 120 0.1 800
 # in batchfile> julia C:\Users\kdw76\WUSTL\Work\julia\sca\paper\runtime_all.jl \"SNR\" [\"pcb_precon\",\"hals\",\"compnmf\"] 50 -10 1 15 150 120 0.1 800
 # to run the batch file in powershell> Start-Process -FilePath "C:\Users\kdw76\WUSTL\work\julia\sca\expr.bat -Wait
-# in julia REPL> ARGS = ["\"SNR\"","[\"pcb\",\"hals\",\"compnmf\"]", "1", "2","0","1","15","150","120","0.1","800"]
-# in julia REPL> ARGS = ["\"tsvd_test\"","[\"pcb_tsvd\"]", "1", "2","0","1","15","150","120","0.1","800"]
+# in julia REPL> ARGS = ["\"SNR\"",":fakecells","[\"pcb\",\"hals\",\"compnmf\"]", "1", "2","0","1","15","150","120","0.1","800"]
+# in julia REPL> ARGS = ["\"naomi/pavg\"",":naomi","[\"pcb_tsvd\",\"hals\",\"compnmf\"]", "1", "2","5.0","1","15","150","120","0.1","800"]
 subdir = eval(Meta.parse(ARGS[1]))
 @show subdir; flush(stdout) 
 subworkpath = joinpath(workpath,"paper",subdir)
-methods=eval(Meta.parse(ARGS[2]));
-num_experistrt = eval(Meta.parse(ARGS[3]));
-num_experiments = eval(Meta.parse(ARGS[4]));
-SNR = eval(Meta.parse(ARGS[5]))
-factor = eval(Meta.parse(ARGS[6]));
-noc = eval(Meta.parse(ARGS[7]));
-nac = 0
-pcb_maxiter = eval(Meta.parse(ARGS[8]));
+dataset = eval(Meta.parse(ARGS[2]))
+methods=eval(Meta.parse(ARGS[3]));
+num_experistrt = eval(Meta.parse(ARGS[4]));
+num_experiments = eval(Meta.parse(ARGS[5]));
+SNR = eval(Meta.parse(ARGS[6])); pavg = SNR
+factor = eval(Meta.parse(ARGS[7]));
+noc = eval(Meta.parse(ARGS[8])); nac = 0
+pcb_maxiter = eval(Meta.parse(ARGS[9]));
 # useprecond = eval(Meta.parse(ARGS[8]));
 # usedenoiseW0H0 = eval(Meta.parse(ARGS[9]));
-hals_maxiter = eval(Meta.parse(ARGS[9]));
-hals_α = eval(Meta.parse(ARGS[10]));
-compnmf_maxiter = eval(Meta.parse(ARGS[11]));
+hals_maxiter = eval(Meta.parse(ARGS[10]));
+hals_α = eval(Meta.parse(ARGS[11]));
+compnmf_maxiter = eval(Meta.parse(ARGS[12]));
 # subdir="size_test"; SNR=0; noc=15; factor=10; pcb_maxiter=80; hals_maxiter=80; compnmf_maxiter=800; iter=1;
 
 # using InteractiveUtils
 # try
 #     sysdir = joinpath(subworkpath,"sysinfo")
 #     isdir(sysdir) || mkdir(sysdir, 0o700) # why error here
-#     sysfn = joinpath(sysdir,"sysinfo$(SNR)db$(factor)f$(noc)s.txt")
+#     sysfn = joinpath(sysdir,"sysinfo$(noisestr)$(factor)f$(noc)s.txt")
 #     isfile(sysfn) && rm(sysfn)
 #     open(sysfn,"w") do file
 #         versioninfo(file;verbose=true)
@@ -48,41 +48,61 @@ compnmf_maxiter = eval(Meta.parse(ARGS[11]));
 #     @warn e
 # end
 
-dataset = :fakecells; inhibitindices=0; bias=0.1
+(imgsz0, lengthT0, hplot_space) = dataset == :naomi ?     ((25,25), 1000, -10000) :
+                                  dataset == :fakecells ? ((40,20), 1000, -5) :
+                                                          ((40,20), 1000, -5)
+issaveimg = false; figsize=(900,600)
+inhibitindices=0; bias=0.1
 lpfilter = dataset ∈ [:neurofinder] ? :meanT : :none; filterstr = "_$(lpfilter)"
-datastr = dataset == :fakecells ? "_fc$(inhibitindices)_$(SNR)dB" : "_$(dataset)"
+noisestr = dataset == :fakecells ? "$(SNR)dB" : dataset == :naomi ? "$(pavg)mW" : ""
+# datastr = dataset  ∈ [:fakecells, :naomi] ? "_fc$(inhibitindices)_$(noisestr)" : "_$(dataset)"
+
 subtract_bg=false; maskth=0.25; makepositive = true; tol=-1
-imgsz0 = (40,20)
 sqfactor = Int(floor(sqrt(factor)))
-imgsz = (sqfactor*imgsz0[1],sqfactor*imgsz0[2]); lengthT = factor*1000; sigma = sqfactor*5.0
+vres0 = 1.0; vres = sqfactor*vres0 # v resolution for naomi dataset
+imgsz = (sqfactor*imgsz0[1],sqfactor*imgsz0[2]); lengthT = factor*lengthT0; sigma = sqfactor*5.0
 maskW=rand(imgsz...).<maskth; maskW = vec(maskW); maskH=rand(lengthT).<maskth;
 
 #initisvd(X,noc) = ((U,s)=IncrementalSVD.isvd(X,noc); H = U'*X ; (U, H, copy(U), copy(H))) # H isn't normalized one
 for iter in num_experistrt:num_experiments
 @show iter; flush(stdout)
-X, imsz, lhT, ncs, gtnoc, datadic = load_data(dataset; sigma=sigma, imgsz=imgsz, lengthT=lengthT, SNR=SNR, bias=bias, useCalciumT=true,
-        inhibitindices=inhibitindices, issave=false, isload=false, gtincludebg=false, save_gtimg=true, save_maxSNR_X=false, save_X=false);
+X, imsz, lhT, ncs, gtnoc, datadic = load_data(dataset;
+        imgsz=imgsz, lengthT=lengthT,                               # fakecells and naomi common parameters
+        sigma=sigma, SNR=SNR, bias=bias, useCalciumT=true,          # fakecells-specific parameters
+        gtincludebg=false, inhibitindices=inhibitindices,           # fakecells-specific parameters (avg_rad unit is μm)
+        seed=iter, pavg=pavg, vres=vres, avg_rad=7.0, inh_frac=0., psf_NA=0.3,  # naomi-specific parameters
+        issave=true, isload=false,
+        save_gtimg=true, save_maxSNR_X=false, save_X=false,
+        verbose=false);
 
 (m,n,p) = (size(X)...,noc)
-gtW, gtH = dataset == :fakecells ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
+gtW, gtH = dataset in [:fakecells, :naomi] ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
+
+if dataset in [:naomi]
+    # gtW, gtH from the naomi ground truth are on a different scale than X (gtW is normalized,
+    # so rescale gtH only); without this, fitd-based matching collapses to ~0.
+    gtH = gtH .* (norm(X)/norm(gtW*gtH))
+    dt = datadic["dt"]
+end
+
 X = LCSVD.noisefilter(lpfilter,X,imgsz)
 
 if subtract_bg
     rt1cd = @elapsed Wcd, Hcd = NMF.nndsvd(X, 1, variant=:ar) # rank 1 NMF
     NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=60, α=0), X, Wcd, Hcd)
-    LCSVD.normalizeW!(Wcd,Hcd); imsave_data(dataset,"Wr1",Wcd,Hcd,imgsz,100; signedcolors=dgwm(), saveH=false)
-    close("all"); plot(Hcd'); savefig("Hr1.png"); plot(gtH[:,inhibitindices]); savefig("Hr1_gtH.png")
+    LCSVD.normalizeW!(Wcd,Hcd); imsave_data(dataset,"Wr1",Wcd,Hcd,imgsz,100; signedcolors=TestData.dgwm(), saveH=false)
+#    close("all"); plot(Hcd'); savefig("Hr1.png"); plot(gtH[:,inhibitindices]); savefig("Hr1_gtH.png")
     bg = Wcd*fill(mean(Hcd),1,n); X .-= bg
 end
 
 for prefix in methods
 @show prefix; flush(stdout)
 
-if prefix in ["pcb_precon","pcb_precon_LPF","pcb","pcb_LPF","pcb_precon_tsvd","pcb_tsvd"]
+if prefix in ["pcb_precon","pcb","pcb_precon_tsvd","pcb_tsvd"]
     # LCSVD
-    useprecond = prefix ∈ ["pcb_precon","pcb_precon_LPF","pcb_precon_tsvd"] ? true : false
-    usedenoiseUVt = prefix ∈ ["pcb_precon_LPF","pcb_LPF"] ? true : false
-    uselv=false; maxiter = pcb_maxiter
+    useprecond = prefix ∈ ["pcb_precon","pcb_precon_tsvd"] ? true : false
+    usedenoiseUVt = false
+    uselv=true; maxiter = pcb_maxiter
     r=0.3 # decaying rate for relaxed L1, if this is too small result is very sensitive for setting α
         # if this is too big iteration number would be increased
 #    try
@@ -111,19 +131,24 @@ if prefix in ["pcb_precon","pcb_precon_LPF","pcb","pcb_LPF","pcb_precon_tsvd","p
 
         @show tailstr, rt2
         W1, H1 = rst0.W, rst0.Ht'
+        powers = norm.(eachcol(W1))
         LCSVD.normalizeW!(W1,H1);
-        dataset == :fakecells && begin
+        if dataset in [:fakecells, :naomi_small, :naomi]
             fv, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W1, H1; clamp=false)
             nodr = LCSVD.matchedorder(ml,noc)
             W1, H1 = W1[:,nodr], H1[nodr,:]
+        else
+            fv = LCSVD.fitd(X,W1*H1)
         end
-        dataset != :fakecells && (fv = LCSVD.fitd(X,W1*H1))
-        fprex = "$(prefix)$(SNR)db$(factor)f$(noc)s$(initmethod)"
+        makepositive && LCSVD.flip2makepos!(W1,H1)
+        fprex = "$(prefix)$(noisestr)$(factor)f$(noc)s$(initmethod)"
+        uselvstr = alg.uselv ? "_lv" : ""
         # precondstr = useprecond ? "_precond" : ""
         # useLPFstr = usedenoiseW0H0 ? "_$(alg.denoisefilter)" : ""
-        fname = joinpath(subworkpath,"$(prefix)","$(fprex)_a$(α)_b$(β)_f$(fv)_it$(rst0.niters)_rt$(rt2)")
-        #imsave_data(dataset,fname,W3,H3,imgsz,100; saveH=false)
-        imsave_data(dataset,fname,W1,H1,imgsz,100; saveH=false, verbose=false)
+        fname = joinpath(subworkpath,"$(prefix)","$(fprex)_a$(α)_b$(β)_f$(fv)$(uselvstr)_it$(rst0.niters)_rt$(rt2)")
+        issaveimg && imsave_data(dataset,fname,W1,H1,imgsz,100; saveH=false, verbose=false)
+        issaveimg && plot_H_gt_n(fname, H1, dt; figsize=figsize, verbose=false)
+        # plotH_data(fname,H1; space=hplot_space,ylabel="",ytickformat="{:.2f}")
 
         f_xs = LCSVD.getdata(rst.traces,:f_x); niters = LCSVD.getdata(rst.traces,:niters); totalniters = sum(niters)
         avgfitss = LCSVD.getdata(rst.traces,:avgfits); fxss = LCSVD.getdata(rst.traces,:fxs)
@@ -134,7 +159,7 @@ if prefix in ["pcb_precon","pcb_precon_LPF","pcb","pcb_LPF","pcb_precon_tsvd","p
             if iter == 1
                 rt2i = 0.
             else
-                rt2i = collect(range(start=rst0.laps[iter-1],stop=rst0.laps[iter],length=length(afs)+1))[1:end-1].-rst0.laps[1]
+                rt2i = collect(range(start=rst0.laps[iter-1],stop=rst0.laps[iter],length=length(afs)+1))[2:end].-rst0.laps[1]
             end
             append!(rt2s,rt2i)
         end
@@ -144,17 +169,12 @@ if prefix in ["pcb_precon","pcb_precon_LPF","pcb","pcb_LPF","pcb_precon_tsvd","p
             metadata = Dict()
             metadata["r"] = r; metadata["initmethod"] = initmethod
             metadata["maxiter"] = maxiter; metadata["useprecond"] = useprecond
-            metadata["usedenoiseW0H0"] = usedenoiseW0H0; metadata["denoisefilter"] = alg.denoisefilter; 
+            metadata["denoisefilter"] = alg.denoisefilter; 
             metadata["alpha"] = α; metadata["beta"] = β
         end
         save(joinpath(subworkpath,"$(prefix)","$(fprex)$(tailstr)_results$(iter).jld2"),"metadata",metadata,"data",dd)
         GC.gc()
     end
-    # catch e
-    #     fprex = "$(prefix)$(SNR)db$(factor)f$(noc)s"
-    #     save(joinpath(subworkpath,prefix,"$(fprex)_error_$(iter).jld2"),datadic)
-    #     @warn e
-    # end
 end
 
 if prefix == "hals"
@@ -171,12 +191,21 @@ if prefix == "hals"
                         tol=tol, verbose=false), X, W1, H1)
 
         @show tailstr, rt2
-        avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W1, H1; clamp=false)
         LCSVD.normalizeW!(W1,H1)#; W1,H1 = LCSVD.sortWHslices(W1,H1)
-        fprex = "$(prefix)$(SNR)db$(factor)f$(noc)s$(initmethod)"
-        fname = joinpath(subworkpath,prefix,"$(fprex)_a$(α)_af$(avgfit)_it$(rst0.niters)_rt$(rt2)")
-        #imsave_data(dataset,fname,W3,H3,imgsz,100; saveH=false)
-        TestData.imsave_data_gt(dataset,fname*"_gt", W1,H1,gtW,gtH,imgsz,100; saveH=false, verbose=false)
+        if dataset in [:fakecells, :naomi_small, :naomi]
+            fv, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W1, H1; clamp=false)
+            nodr = LCSVD.matchedorder(ml,noc)
+            W1, H1 = W1[:,nodr], H1[nodr,:]
+        else
+            fv = LCSVD.fitd(X,W1*H1)
+        end
+        fprex = "$(prefix)$(noisestr)$(factor)f$(noc)s$(initmethod)"
+        fname = joinpath(subworkpath,prefix,"$(fprex)_a$(α)_f$(fv)_it$(rst0.niters)_rt$(rt2)")
+        issaveimg && imsave_data(dataset,fname,W1,H1,imgsz,100; saveH=false)
+        issaveimg && plot_H_gt_n(fname, H1, dt; figsize=figsize, verbose=false)
+        # issaveimg && plotH_data(fname,H1; space=hplot_space,ylabel="",ytickformat="{:.2f}")
+        # TestData.imsave_data_gt(dataset,fname*"_gt", W1,H1,gtW,gtH,imgsz,100; saveH=false, verbose=false)
+
         rt2s = collect(range(start=0,stop=rt2,length=length(result.avgfits)))
         dd["niters"] = result.niters; dd["totalniters"] = result.niters; dd["rt1"] = rt1cd; dd["rt2s"] = rt2s
         dd["avgfits"] = result.avgfits; dd["f_xs"] = result.objvalues;
@@ -190,7 +219,7 @@ end
 
 if prefix == "compnmf"
     # COMPNMF
-    mfmethod = :COMPNMF; maxiter = compnmf_maxiter
+    maxiter = compnmf_maxiter
     for (tailstr,initmethod) in [("_nn",:lowrank_nndsvd)]
         dd = Dict()
         avgfits=Float64[]; rt2s=Float64[]; inner_fxs=Float64[]
@@ -208,18 +237,26 @@ if prefix == "compnmf"
         Wcn, Hcn = copy(Wcn0), copy(Hcn0);
         result = CompNMF.solve!(CompNMF.CompressedNMF{Float64}(maxiter=maxiter, tol=tol, verbose=true), X, Wcn, Hcn;
                             gtU=gtW, gtV=gtH, maskU=maskW, maskV=maskH)
-        Wcn, Hcn = copy(Wcn0), copy(Hcn0);
-        rt2 = @elapsed rst0 = CompNMF.solve!(CompNMF.CompressedNMF{Float64}(maxiter=maxiter, tol=tol, verbose=false), X, Wcn, Hcn)
+        W1, H1 = copy(Wcn0), copy(Hcn0);
+        rt2 = @elapsed rst0 = CompNMF.solve!(CompNMF.CompressedNMF{Float64}(maxiter=maxiter, tol=tol, verbose=false), X, W1, H1)
         rt1 += rst0.inittime # add calculation time for compression matrices L and R
         rt2 -= rst0.inittime
 
         @show tailstr, rt2
-        avgfit, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, Wcn, Hcn; clamp=false)
-        LCSVD.normalizeW!(Wcn,Hcn)#; W1,H1 = LCSVD.sortWHslices(Wcn,Hcn)
-        fprex = "$(prefix)$(SNR)db$(factor)f$(noc)s$(initmethod)"
-        fname = joinpath(subworkpath,prefix,"$(fprex)_af$(avgfit)_it$(rst0.niters)_rt$(rt2)")
-        #imsave_data(dataset,fname,W3,H3,imgsz,100; saveH=false)
-        TestData.imsave_data_gt(dataset,fname*"_gt", Wcn,Hcn,gtW,gtH,imgsz,100; saveH=false, verbose=false)
+        LCSVD.normalizeW!(W1,H1)#; W1,H1 = LCSVD.sortWHslices(W1,H1)
+        if dataset in [:fakecells, :naomi_small, :naomi]
+            fv, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH, W1, H1; clamp=false)
+            nodr = LCSVD.matchedorder(ml,noc)
+            W1, H1 = W1[:,nodr], H1[nodr,:]
+        else
+            fv = LCSVD.fitd(X,W1*H1)
+        end
+        fprex = "$(prefix)$(noisestr)$(factor)f$(noc)s$(initmethod)"
+        fname = joinpath(subworkpath,prefix,"$(fprex)_f$(fv)_it$(rst0.niters)_rt$(rt2)")
+        issaveimg && imsave_data(dataset,fname,W1,H1,imgsz,100; saveH=false)
+        issaveimg && plot_H_gt_n(fname, H1, dt; figsize=figsize, verbose=false)
+        # issaveimg && plotH_data(fname, H1; space=hplot_space,ylabel="",ytickformat="{:.2f}")
+        # TestData.imsave_data_gt(dataset,fname*"_gt", W1,H1,gtW,gtH,imgsz,100; saveH=false, verbose=false)
 
         rt2s = collect(range(start=0,stop=rt2,length=length(result.avgfits)))
         dd["niters"] = result.niters; dd["rt1"] = rt1; dd["rt2s"] = rt2s
