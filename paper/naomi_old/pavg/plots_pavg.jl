@@ -14,7 +14,7 @@ include(joinpath(workpath,"setup_light.jl"))
 include(joinpath(workpath,"setup_plot.jl"))
 using Interpolations
 
-pavgs = [5.0]; num_experiments = 2; ncells=15; factor=1
+pavgs = [1.0, 3.0, 5.0, 7.0, 9.0]; num_experiments = 50; ncells=15; factor=1
 itp_time_resol = 1000
 for (method, initmethods, tailstrs) in [("pcb_tsvd", ["tsvd","tsvd"], ["_sp","_sp_nn"]),
                 # ("pcb_LPF", ["isvd","isvd", "nndsvd"], ["_sp","_sp_nn", "_nn"]),
@@ -93,7 +93,7 @@ plotrng = Colon()
 
 # compare PCB with other methods
 fig = Figure(size=resol)
-maxplottimes = [0.1,0.3,1.5]
+maxplottimes = [0.15, 0.15, 0.15, 0.15, 0.15]
 ax = AMakie.Axis(fig[1, 1], limits = ((0,maxplottimes[idx]#=min(maxplottimes[idx],plottime)=#), ylimits),
                 xlabel = "time(sec)", ylabel = "average fit", xlabelsize=fntsize2, ylabelsize=fntsize2,
                 xticklabelsize=fntsize2, yticklabelsize=fntsize2)#, title = "Average Fit Value vs. Running Time")

@@ -16,7 +16,7 @@ include(joinpath(workpath,"setup_light.jl"))
 # in batchfile> julia C:\Users\kdw76\WUSTL\Work\julia\sca\paper\runtime_all.jl \"SNR\" [\"pcb_precon\",\"hals\",\"compnmf\"] 50 -10 1 15 150 120 0.1 800
 # to run the batch file in powershell> Start-Process -FilePath "C:\Users\kdw76\WUSTL\work\julia\sca\expr.bat -Wait
 # in julia REPL> ARGS = ["\"SNR\"",":fakecells","[\"pcb\",\"hals\",\"compnmf\"]", "1", "2","0","1","15","150","120","0.1","800"]
-# in julia REPL> ARGS = ["\"naomi/pavg\"",":naomi","[\"pcb_tsvd\",\"hals\",\"compnmf\"]", "1", "2","5.0","1","15","0.0","100","200","0.1","1000","false","true","false"]
+# in julia REPL> ARGS = ["\"naomi/pavg\"",":naomi","[\"pcb_tsvd\",\"hals\",\"compnmf\"]", "1", "2","5.0","1","15","0.0","100","200","0.1","1000","false"]
 subdir = eval(Meta.parse(ARGS[1]))
 @show subdir; flush(stdout) 
 subworkpath = joinpath(workpath,"paper",subdir)
@@ -35,9 +35,8 @@ hals_maxiter = eval(Meta.parse(ARGS[11]));
 hals_α = eval(Meta.parse(ARGS[12]));
 compnmf_maxiter = eval(Meta.parse(ARGS[13]));
 subtract_bg = eval(Meta.parse(ARGS[14]));
-weighted = eval(Meta.parse(ARGS[15]));
-delta_f = eval(Meta.parse(ARGS[16]));
-
+gridcols=8; gridrows=6 # grid cols and rows for W image saving
+numWimg = gridcols*gridrows
 # subdir="size_test"; SNR=0; noc=15; factor=10; pcb_maxiter=80; hals_maxiter=80; compnmf_maxiter=800; iter=1;
 
 # using InteractiveUtils
@@ -53,12 +52,11 @@ delta_f = eval(Meta.parse(ARGS[16]));
 #     @warn e
 # end
 
-(imgsz0, lengthT0, hplot_space) = dataset == :naomi ?     ((25,25), 1000, -10000) :
+(imgsz0, lengthT0, hplot_space) = dataset == :naomi ?     ((158,158), 5000, -10000) :
                                   dataset == :fakecells ? ((40,20), 1000, -5) :
                                                           ((40,20), 1000, -5)
-gtncells = 10 # naomi specific
 issaveimg = true; figsize=(900,600)
-inhibitindices=0; bias=0.1
+inhibitindices=0; bias=0.1; orthogonal=false
 lpfilter = dataset ∈ [:neurofinder] ? :meanT : :none; filterstr = "_$(lpfilter)"
 noisestr = dataset == :fakecells ? "$(SNR)dB" : dataset == :naomi ? "$(pavg)mW" : ""
 # datastr = dataset  ∈ [:fakecells, :naomi] ? "_fc$(inhibitindices)_$(noisestr)" : "_$(dataset)"
@@ -68,16 +66,15 @@ sqfactor = Int(floor(sqrt(factor)))
 vres0 = 1.0; vres = sqfactor*vres0 # v resolution for naomi dataset
 imgsz = (sqfactor*imgsz0[1],sqfactor*imgsz0[2]); lengthT = factor*lengthT0; sigma = sqfactor*5.0
 maskW=rand(imgsz...).<maskth; maskW = vec(maskW); maskH=rand(lengthT).<maskth;
-delta_f = false
 
 #initisvd(X,noc) = ((U,s)=IncrementalSVD.isvd(X,noc); H = U'*X ; (U, H, copy(U), copy(H))) # H isn't normalized one
 for iter in num_experistrt:num_experiments
 @show iter; flush(stdout)
 X, imsz, lhT, ncs, gtnoc, datadic = load_data(dataset; # dpath=joinpath(workpath,"paper", subdir,"test"),
         imgsz=imgsz, lengthT=lengthT,                               # fakecells and naomi common parameters
-        sigma=sigma, SNR=SNR, bias=bias, useCalciumT=true,          # fakecells-specific parameters
+        sigma=sigma, SNR=SNR, bias=bias, useCalciumT=true, orthogonal=orthogonal, # fakecells-specific parameters
         gtincludebg=false, inhibitindices=inhibitindices,           # fakecells-specific parameters (avg_rad unit is μm)
-        seed=iter, pavg=pavg, vres=vres, avg_rad=7.0, inh_frac=inh_frac, psf_NA=0.3, gtncells=gtncells, # naomi-specific parameters
+        seed=iter, pavg=pavg, vres=vres, avg_rad=7.0, inh_frac=inh_frac, psf_NA=0.3, gtncells=500, # naomi-specific parameters
         issave=true, isload=true,
         save_gtimg=true, save_maxSNR_X=false, save_X=false,
         verbose=false);
@@ -86,12 +83,8 @@ X, imsz, lhT, ncs, gtnoc, datadic = load_data(dataset; # dpath=joinpath(workpath
 gtW, gtH = dataset in [:fakecells, :naomi] ? (datadic["gtW"], datadic["gtH"]) : (Matrix{eltype(X)}(undef,0,0),Matrix{eltype(X)}(undef,0,0))
 
 if dataset in [:naomi]
-    if delta_f
-        powers, mod_vals = datadic["powers"], datadic["mod_vals"]
-        gtH_nobase = (gtH./powers.-mod_vals).*powers
-    else
-        gtH_nobase = gtH
-    end
+    powers, mod_vals = datadic["powers"], datadic["mod_vals"]
+    gtH_nobase = (gtH./powers.-mod_vals).*powers
     dt = datadic["dt"]; inh_idx = datadic["inh_idx"]
 else
     gtH_nobase = gtH
@@ -128,16 +121,13 @@ if prefix in ["pcb_precon","pcb","pcb_precon_tsvd","pcb_tsvd"]
 
         rt1 = @elapsed U, H0, M0, N0, Wp, Hp, D = LCSVD.initpcb(X, noc, nac; initmethod=initmethod, svdmethod=:isvd)
         V = copy(H0'); N0t = copy(N0')
-        inner_tol = 1e-6; inner_maxiter = 50#Int(ceil(2.5*ncs+350))# Int(ceil(0.75*ncs+100)) # 
+        inner_tol = 1e-6; inner_maxiter = 1000#Int(ceil(2.5*ncs+350))# Int(ceil(0.75*ncs+100)) # 
         alg = LCSVD.LinearCombSVD(α1=α1, α2=α2, β1=β1, β2=β2,
             #α1vec=α1vec, α2vec=α2vec, β1vec=β1vec, β2vec=β2vec,
-            r=r, useprecond=useprecond, usedenoiseUVt=usedenoiseUVt, maskW=maskW, maskH = maskH,
-            denoisefilter=:avg, uselv=uselv, imgsz=imgsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = true,
-            store_inner_trace = true, show_trace = false, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
+            r=r, useprecond=useprecond, usedenoiseUVt=usedenoiseUVt, maskW=Colon(), maskH = Colon(),
+            denoisefilter=:avg, uselv=uselv, imgsz=imgsz, maxiter = maxiter, inner_maxiter = inner_maxiter, store_trace = false,
+            store_inner_trace = false, show_trace = true, allow_f_increases = true, f_abstol=tol, f_reltol=tol,
             f_inctol=1e2, x_abstol=tol, x_reltol=tol, inner_tol = inner_tol, successive_f_converge=0);
-        M1, N1t = copy(M0), copy(N0t)
-        rst = LCSVD.solve!(alg, X, U, V, D, M1, N1t; gtW=gtW, gtH=gtH, weighted=weighted, delta_f=delta_f);
-        alg.show_trace = false; alg.store_trace = false; alg.store_inner_trace = false; alg.maskW = alg.maskH = Colon()
         M1, N1t = copy(M0), copy(N0t)
         rt2 = @elapsed rst0 = LCSVD.solve!(alg, X, U, V, D, M1, N1t);
 
@@ -147,12 +137,12 @@ if prefix in ["pcb_precon","pcb","pcb_precon_tsvd","pcb_tsvd"]
         LCSVD.normalizeW!(W1,H1);
         makepositive && LCSVD.flip2makepos!(W1,H1)
         if dataset in [:fakecells, :naomi]
-            if (dataset == :naomi) && delta_f
+            if dataset == :naomi
                 H1_nobase = subtract_baseline(H1; q=0.01)
             else
                 H1_nobase = H1
             end
-            fv, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH_nobase, W1, H1_nobase; weighted=weighted, clamp=false)
+            fv, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH_nobase, W1, H1_nobase; clamp=false)
             nodr = LCSVD.matchedorder(ml,noc)
             W1, H1, H1_nobase = W1[:,nodr], H1[nodr,:], H1_nobase[nodr,:]
         else
@@ -163,25 +153,11 @@ if prefix in ["pcb_precon","pcb","pcb_precon_tsvd","pcb_tsvd"]
         # precondstr = useprecond ? "_precond" : ""
         # useLPFstr = usedenoiseW0H0 ? "_$(alg.denoisefilter)" : ""
         fname = joinpath(subworkpath,"$(prefix)","$(fprex)_a$(α)_b$(β)_expr$(iter)_f$(fv)$(uselvstr)_it$(rst0.niters)_rt$(rt2)")
-        issaveimg && imsave_data(dataset,fname,W1,H1_nobase,imgsz,100; saveH=false, verbose=false)
-        issaveimg && plot_H_gt_n(fname, H1_nobase, dt; figsize=figsize, verbose=false)
+        issaveimg && imsave_data(dataset,fname,W1[:,1:numWimg],H1_nobase[1:numWimg,:],imgsz,100; gridcols=gridcols, saveH=false, verbose=false)
+        issaveimg && plot_H_gt_n(fname, H1_nobase[1:numWimg,:], dt; figsize=figsize, verbose=false)
         # plotH_data(fname,H1; space=hplot_space,ylabel="",ytickformat="{:.2f}")
 
-        f_xs = LCSVD.getdata(rst.traces,:f_x); niters = LCSVD.getdata(rst.traces,:niters); totalniters = sum(niters)
-        avgfitss = LCSVD.getdata(rst.traces,:avgfits); fxss = LCSVD.getdata(rst.traces,:fxs)
-        avgfits = Float64[]; inner_fxs = Float64[]; rt2s = Float64[]
-        for (iter,(afs,fxs)) in enumerate(zip(avgfitss, fxss))
-            isempty(afs) && continue
-            append!(avgfits,afs); append!(inner_fxs,fxs)
-            if iter == 1
-                rt2i = 0.
-            else
-                rt2i = collect(range(start=rst0.laps[iter-1],stop=rst0.laps[iter],length=length(afs)+1))[2:end].-rst0.laps[1]
-            end
-            append!(rt2s,rt2i)
-        end
-        dd["niters"] = niters; dd["totalniters"] = totalniters; dd["rt1"] = rt1; dd["rt2s"] = rt2s
-        dd["avgfits"] = avgfits; dd["f_xs"] = f_xs; dd["inner_fxs"] = inner_fxs
+        dd["rt1"] = rt1; dd["rt2"] = rt2; dd["M"] = M1; dd["N"] = N1t'
         if true#iter == num_experiments
             metadata = Dict()
             metadata["r"] = r; metadata["initmethod"] = initmethod
@@ -198,39 +174,34 @@ if prefix == "hals"
     # HALS
     rt1cd = @elapsed Wcd0, Hcd0 = NMF.nndsvd(X, noc, variant=:ar)
     maxiter = hals_maxiter
-    for (tailstr,initmethod,α,l₁ratio) in [("_sp_sm_nn",:nndsvd,hals_α,0.1)]#("_nn",:nndsvd,0.,1.0),("_sp_nn",:nndsvd,hals_α,1.0)
+    for (tailstr,initmethod,α) in [("_nn",:nndsvd,0.),("_sp_nn",:nndsvd,hals_α)]#
         dd = Dict()
-        W1, H1 = copy(Wcd0), copy(Hcd0)#; avgfit, _ = NMF.matchedfitval(gtW,gtH, Wcd, Hcd; clamp=false); push!(avgfits,avgfit)
-        result = NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=maxiter, α=α, l₁ratio=l₁ratio, tol=tol, verbose=true),
-                        X, W1, H1; gtW=gtW, gtH=gtH, maskW=maskW, maskH=maskH, weighted=weighted, delta_f=delta_f)
         W1, H1 = copy(Wcd0), copy(Hcd0);
         rt2 = @elapsed rst0 = NMF.solve!(NMF.CoordinateDescent{Float64}(maxiter=maxiter, α=α, l₁ratio=1,
-                        tol=tol, verbose=false), X, W1, H1)
+                        tol=tol, verbose=true), X, W1, H1)
 
         @show tailstr, rt2
         LCSVD.normalizeW!(W1,H1)#; W1,H1 = LCSVD.sortWHslices(W1,H1)
         if dataset in [:fakecells, :naomi]
-            if (dataset == :naomi) && delta_f
+            if dataset == :naomi
                H1_nobase = subtract_baseline(H1; q=0.01)
             else
                 H1_nobase = H1
             end
-            fv, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH_nobase, W1, H1_nobase; weighted=weighted, clamp=false)
+            fv, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH_nobase, W1, H1_nobase; clamp=false)
             nodr = LCSVD.matchedorder(ml,noc)
             W1, H1, H1_nobase = W1[:,nodr], H1[nodr,:], H1_nobase[nodr,:]
         else
             fv = LCSVD.fitd(X,W1*H1)
         end
         fprex = "$(prefix)$(noisestr)$(factor)f$(noc)s$(initmethod)"
-        fname = joinpath(subworkpath,prefix,"$(fprex)_a$(α)_lr$(l₁ratio)_expr$(iter)_f$(fv)_it$(rst0.niters)_rt$(rt2)")
-        issaveimg && imsave_data(dataset,fname,W1,H1_nobase,imgsz,100; saveH=false)
-        issaveimg && plot_H_gt_n(fname, H1_nobase, dt; figsize=figsize, verbose=false)
+        fname = joinpath(subworkpath,prefix,"$(fprex)_a$(α)_expr$(iter)_f$(fv)_it$(rst0.niters)_rt$(rt2)")
+        issaveimg && imsave_data(dataset,fname,W1[:,1:numWimg],H1_nobase[1:numWimg,:],imgsz,100; gridcols=gridcols, saveH=false, verbose=false)
+        issaveimg && plot_H_gt_n(fname, H1_nobase[1:numWimg,:], dt; figsize=figsize, verbose=false)
         # issaveimg && plotH_data(fname,H1; space=hplot_space,ylabel="",ytickformat="{:.2f}")
         # TestData.imsave_data_gt(dataset,fname*"_gt", W1,H1,gtW,gtH,imgsz,100; saveH=false, verbose=false)
 
-        rt2s = collect(range(start=0,stop=rt2,length=length(result.avgfits)))
-        dd["niters"] = result.niters; dd["totalniters"] = result.niters; dd["rt1"] = rt1cd; dd["rt2s"] = rt2s
-        dd["avgfits"] = result.avgfits; dd["f_xs"] = result.objvalues;
+        dd["rt1"] = rt1cd; dd["rt2"] = rt2; dd["W"] = W1; dd["H"] = H1
         if true#iter == num_experiments
             metadata = Dict()
             metadata["maxiter"] = maxiter; metadata["alpha"] = α
@@ -257,22 +228,19 @@ if prefix == "compnmf"
         #                                                     penmetric=penmetric, stparams=stparams, cparams=cparams);
         rt1 = @elapsed Wcn0, Hcn0 = NMF.nndsvd(X, noc, variant=:ar);
         Wcn, Hcn = copy(Wcn0), copy(Hcn0);
-        result = CompNMF.solve!(CompNMF.CompressedNMF{Float64}(maxiter=maxiter, tol=tol, verbose=true), X, Wcn, Hcn;
-                            gtU=gtW, gtVt=gtH, maskU=maskW, maskVt=maskH, weighted=weighted, delta_f=delta_f)
-        W1, H1 = copy(Wcn0), copy(Hcn0);
-        rt2 = @elapsed rst0 = CompNMF.solve!(CompNMF.CompressedNMF{Float64}(maxiter=maxiter, tol=tol, verbose=false), X, W1, H1)
+        rt2 = @elapsed rst0 = CompNMF.solve!(CompNMF.CompressedNMF{Float64}(maxiter=maxiter, tol=tol, verbose=true), X, W1, H1)
         rt1 += rst0.inittime # add calculation time for compression matrices L and R
         rt2 -= rst0.inittime
 
         @show tailstr, rt2
         LCSVD.normalizeW!(W1,H1)#; W1,H1 = LCSVD.sortWHslices(W1,H1)
         if dataset in [:fakecells, :naomi]
-            if (dataset == :naomi) && delta_f
+            if dataset == :naomi
                H1_nobase = subtract_baseline(H1; q=0.01)
             else
                 H1_nobase = H1
             end
-            fv, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH_nobase, W1, H1_nobase; weighted=weighted, clamp=false)
+            fv, ml, merrval, rerrs = LCSVD.matchedfitval(gtW, gtH_nobase, W1, H1_nobase; clamp=false)
             nodr = LCSVD.matchedorder(ml,noc)
             W1, H1, H1_nobase = W1[:,nodr], H1[nodr,:], H1_nobase[nodr,:]
         else
@@ -280,14 +248,12 @@ if prefix == "compnmf"
         end
         fprex = "$(prefix)$(noisestr)$(factor)f$(noc)s$(initmethod)"
         fname = joinpath(subworkpath,prefix,"$(fprex)_expr$(iter)_f$(fv)_it$(rst0.niters)_rt$(rt2)")
-        issaveimg && imsave_data(dataset,fname,W1,H1_nobase,imgsz,100; saveH=false)
-        issaveimg && plot_H_gt_n(fname, H1_nobase, dt; figsize=figsize, verbose=false)
+        issaveimg && imsave_data(dataset,fname,W1[:,1:numWimg],H1_nobase[1:numWimg,:],imgsz,100; gridcols=gridcols, saveH=false, verbose=false)
+        issaveimg && plot_H_gt_n(fname, H1_nobase[1:numWimg,:], dt; figsize=figsize, verbose=false)
         # issaveimg && plotH_data(fname, H1; space=hplot_space,ylabel="",ytickformat="{:.2f}")
         # TestData.imsave_data_gt(dataset,fname*"_gt", W1,H1,gtW,gtH,imgsz,100; saveH=false, verbose=false)
 
-        rt2s = collect(range(start=0,stop=rt2,length=length(result.avgfits)))
-        dd["niters"] = result.niters; dd["rt1"] = rt1; dd["rt2s"] = rt2s
-        dd["avgfits"] = result.avgfits; dd["f_xs"] = result.objvalues;
+        dd["rt1"] = rt1; dd["rt2"] = rt2; dd["W"] = W1; dd["H"] = H1
         if true#iter == num_experiments
             metadata = Dict()
             metadata["maxiter"] = maxiter
